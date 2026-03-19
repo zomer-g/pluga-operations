@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #1e3a5f;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #4a5c3a;
+  --color-secondary-foreground: #ffffff;
+  --color-accent: #d4a843;
+  --color-accent-foreground: #1a1a1a;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-muted: #64748b;
+  --color-muted-foreground: #94a3b8;
+  --color-border: #334155;
+  --color-ring: #3b82f6;
+  --color-background: #0f172a;
+  --color-foreground: #f1f5f9;
+  --color-card: #1e293b;
+  --color-card-foreground: #f1f5f9;
+  --color-popover: #1e293b;
+  --color-popover-foreground: #f1f5f9;
+  --color-input: #334155;
+
+  --color-status-active: #22c55e;
+  --color-status-training: #3b82f6;
+  --color-status-leave: #f59e0b;
+  --color-status-medical: #ef4444;
+  --color-status-released: #6b7280;
+  --color-status-reserve: #8b5cf6;
+  --color-status-absent: #ec4899;
+
+  --font-sans: "Noto Sans Hebrew", system-ui, sans-serif;
+  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-sm: 0.25rem;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Light theme overrides */
+.light {
+  --color-primary: #1e3a5f;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #4a5c3a;
+  --color-secondary-foreground: #ffffff;
+  --color-accent: #d4a843;
+  --color-accent-foreground: #1a1a1a;
+  --color-muted: #94a3b8;
+  --color-muted-foreground: #64748b;
+  --color-border: #cbd5e1;
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --color-input: #e2e8f0;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 3px;
+}
+
+/* Safe area for mobile */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Touch targets */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
