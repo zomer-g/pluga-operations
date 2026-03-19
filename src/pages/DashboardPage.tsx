@@ -61,7 +61,7 @@ export function DashboardPage() {
 
         <Card
           className="cursor-pointer hover:border-primary/50 transition-colors"
-          onClick={() => navigate('/tanks')}
+          onClick={() => navigate('/assignments')}
         >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -80,7 +80,7 @@ export function DashboardPage() {
 
         <Card
           className="cursor-pointer hover:border-primary/50 transition-colors"
-          onClick={() => navigate('/status-board')}
+          onClick={() => navigate('/shampaf')}
         >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">

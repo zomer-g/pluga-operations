@@ -70,6 +70,7 @@ export async function addSoldier(data: SoldierFormData): Promise<string> {
     uniformSizeTop: data.uniformSizeTop as Soldier['uniformSizeTop'],
     uniformSizeBottom: data.uniformSizeBottom as Soldier['uniformSizeBottom'],
     email: data.email || undefined,
+    trainedRole: (data.trainedRole || undefined) as Soldier['trainedRole'],
     createdAt: now,
     updatedAt: now,
   };

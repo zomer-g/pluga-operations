@@ -20,3 +20,36 @@ export function formatDateTime(dateString: string): string {
 export function todayString(): string {
   return new Date().toISOString().split('T')[0]!;
 }
+
+export function noonToday(): string {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  return d.toISOString().slice(0, 16);
+}
+
+export function noonTomorrow(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(12, 0, 0, 0);
+  return d.toISOString().slice(0, 16);
+}
+
+export function noonOfDate(date: Date): string {
+  const d = new Date(date);
+  d.setHours(12, 0, 0, 0);
+  return d.toISOString().slice(0, 16);
+}
+
+export function dateRangesOverlap(
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string
+): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+export function formatDateTimeShort(isoString: string): string {
+  const d = new Date(isoString);
+  return d.toLocaleDateString('he-IL') + ' ' + d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+}

@@ -65,11 +65,22 @@ export const TANK_STATUSES: { value: TankStatus; label: string }[] = [
 ];
 
 export const CREW_ROLES: { value: CrewRole; label: string; position: string }[] = [
-  { value: 'commander', label: 'מפקד', position: 'top-right' },
-  { value: 'gunner', label: 'תותחן', position: 'top-left' },
-  { value: 'driver', label: 'נהג', position: 'bottom-right' },
-  { value: 'loader', label: 'טען', position: 'bottom-left' },
+  { value: 'driver', label: 'נהג', position: 'front-left' },
+  { value: 'gunner', label: 'תותחן', position: 'front-right' },
+  { value: 'loader', label: 'טען', position: 'back-left' },
+  { value: 'commander', label: 'מפקד', position: 'back-right' },
 ];
+
+export const SHAMPAF_COLORS = {
+  mobilized: 'bg-emerald-600',
+  vacation: 'bg-amber-500',
+  conflict: 'bg-red-500',
+};
+
+export const ASSIGNMENT_COLORS = {
+  tank_role: 'bg-blue-600',
+  general_mission: 'bg-purple-600',
+};
 
 export function getRankLabel(rank: SoldierRank): string {
   return RANKS.find(r => r.value === rank)?.label ?? rank;

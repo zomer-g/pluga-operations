@@ -43,6 +43,8 @@ export type TankStatus = 'operational' | 'maintenance' | 'damaged' | 'reserve';
 
 export type CrewRole = 'commander' | 'gunner' | 'driver' | 'loader';
 
+export type AssignmentType = 'tank_role' | 'general_mission';
+
 // ===== Entities =====
 
 export interface Soldier {
@@ -63,6 +65,7 @@ export interface Soldier {
   helmetSize?: string;
   platoonId?: string;
   squadId?: string;
+  trainedRole?: CrewRole;
   profileImageUrl?: string;
   createdAt: string;
   updatedAt: string;
@@ -129,4 +132,37 @@ export interface Squad {
   name: string;
   number: number;
   leaderId?: string;
+}
+
+// ===== שמ"פ & שיבוץ =====
+
+export interface ShampafEntry {
+  id: string;
+  soldierId: string;
+  startDateTime: string;
+  endDateTime: string;
+  orderNumber?: string;
+  notes?: string;
+}
+
+export interface ShampafVacation {
+  id: string;
+  shampafEntryId: string;
+  soldierId: string;
+  startDateTime: string;
+  endDateTime: string;
+  reason?: string;
+  notes?: string;
+}
+
+export interface Assignment {
+  id: string;
+  soldierId: string;
+  type: AssignmentType;
+  tankId?: string;
+  role?: CrewRole;
+  missionName?: string;
+  startDateTime: string;
+  endDateTime: string;
+  notes?: string;
 }

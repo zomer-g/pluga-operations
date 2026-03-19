@@ -8,6 +8,9 @@ import type {
   TankCrewAssignment,
   Platoon,
   Squad,
+  ShampafEntry,
+  ShampafVacation,
+  Assignment,
 } from './schema';
 
 const db = new Dexie('PlugaOperationsDB') as Dexie & {
@@ -19,6 +22,9 @@ const db = new Dexie('PlugaOperationsDB') as Dexie & {
   tankCrewAssignments: EntityTable<TankCrewAssignment, 'id'>;
   platoons: EntityTable<Platoon, 'id'>;
   squads: EntityTable<Squad, 'id'>;
+  shampafEntries: EntityTable<ShampafEntry, 'id'>;
+  shampafVacations: EntityTable<ShampafVacation, 'id'>;
+  assignments: EntityTable<Assignment, 'id'>;
 };
 
 db.version(1).stores({
@@ -30,6 +36,13 @@ db.version(1).stores({
   tankCrewAssignments: 'id, tankId, soldierId, role, endDate',
   platoons: 'id, number',
   squads: 'id, platoonId, number',
+});
+
+db.version(2).stores({
+  soldiers: 'id, militaryId, lastName, rank, platoonId, squadId, trainedRole',
+  shampafEntries: 'id, soldierId, startDateTime, endDateTime',
+  shampafVacations: 'id, shampafEntryId, soldierId, startDateTime, endDateTime',
+  assignments: 'id, soldierId, type, tankId, role, startDateTime, endDateTime',
 });
 
 export { db };

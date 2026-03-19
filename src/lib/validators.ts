@@ -17,6 +17,7 @@ export const soldierSchema = z.object({
   helmetSize: z.string().optional(),
   platoonId: z.string().optional(),
   squadId: z.string().optional(),
+  trainedRole: z.enum(['commander', 'gunner', 'driver', 'loader']).optional().or(z.literal('')),
 });
 
 export type SoldierFormData = z.infer<typeof soldierSchema>;
@@ -76,3 +77,39 @@ export const equipmentTypeSchema = z.object({
 });
 
 export type EquipmentTypeFormData = z.infer<typeof equipmentTypeSchema>;
+
+// ===== שמ"פ & שיבוץ =====
+
+export const shampafEntrySchema = z.object({
+  soldierId: z.string().min(1, 'חייל נדרש'),
+  startDateTime: z.string().min(1, 'תאריך התחלה נדרש'),
+  endDateTime: z.string().min(1, 'תאריך סיום נדרש'),
+  orderNumber: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export type ShampafEntryFormData = z.infer<typeof shampafEntrySchema>;
+
+export const shampafVacationSchema = z.object({
+  shampafEntryId: z.string().min(1),
+  soldierId: z.string().min(1),
+  startDateTime: z.string().min(1, 'תאריך התחלה נדרש'),
+  endDateTime: z.string().min(1, 'תאריך סיום נדרש'),
+  reason: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export type ShampafVacationFormData = z.infer<typeof shampafVacationSchema>;
+
+export const assignmentSchema = z.object({
+  soldierId: z.string().min(1, 'חייל נדרש'),
+  type: z.enum(['tank_role', 'general_mission']),
+  tankId: z.string().optional(),
+  role: z.enum(['commander', 'gunner', 'driver', 'loader']).optional(),
+  missionName: z.string().optional(),
+  startDateTime: z.string().min(1, 'תאריך התחלה נדרש'),
+  endDateTime: z.string().min(1, 'תאריך סיום נדרש'),
+  notes: z.string().optional(),
+});
+
+export type AssignmentFormData = z.infer<typeof assignmentSchema>;

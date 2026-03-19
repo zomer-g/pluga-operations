@@ -4,8 +4,8 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { SoldiersListPage } from '@/pages/SoldiersListPage';
 import { SoldierProfilePage } from '@/pages/SoldierProfilePage';
 import { EquipmentPage } from '@/pages/EquipmentPage';
-import { TanksPage } from '@/pages/TanksPage';
-import { StatusBoardPage } from '@/pages/StatusBoardPage';
+import { ShampafPage } from '@/pages/ShampafPage';
+import { AssignmentPage } from '@/pages/AssignmentPage';
 import { ReportsPage } from '@/pages/ReportsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 
@@ -18,8 +18,8 @@ export default function App() {
           <Route path="/soldiers" element={<SoldiersListPage />} />
           <Route path="/soldiers/:id" element={<SoldierProfilePage />} />
           <Route path="/equipment" element={<EquipmentPage />} />
-          <Route path="/tanks" element={<TanksPage />} />
-          <Route path="/status-board" element={<StatusBoardPage />} />
+          <Route path="/shampaf" element={<ShampafPage />} />
+          <Route path="/assignments" element={<AssignmentPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

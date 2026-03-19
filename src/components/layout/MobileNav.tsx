@@ -3,8 +3,8 @@ import {
   LayoutDashboard,
   Users,
   Package,
-  ShieldCheck,
-  CalendarClock,
+  ScrollText,
+  Target,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -12,8 +12,8 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'בקרה' },
   { to: '/soldiers', icon: Users, label: 'חיילים' },
   { to: '/equipment', icon: Package, label: 'ציוד' },
-  { to: '/tanks', icon: ShieldCheck, label: 'טנקים' },
-  { to: '/status-board', icon: CalendarClock, label: 'סטטוס' },
+  { to: '/shampaf', icon: ScrollText, label: 'שמ"פ' },
+  { to: '/assignments', icon: Target, label: 'שיבוץ' },
 ];
 
 export function MobileNav() {

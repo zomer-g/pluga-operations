@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { soldierSchema, type SoldierFormData } from '@/lib/validators';
-import { RANKS, BLOOD_TYPES, CLOTHING_SIZES } from '@/lib/constants';
+import { RANKS, BLOOD_TYPES, CLOTHING_SIZES, CREW_ROLES } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,6 +44,7 @@ export function SoldierForm({ soldier, onSubmit, onCancel }: SoldierFormProps) {
           shoeSize: soldier.shoeSize,
           helmetSize: soldier.helmetSize ?? '',
           platoonId: soldier.platoonId ?? '',
+          trainedRole: soldier.trainedRole ?? '',
         }
       : {
           rank: '',
@@ -51,10 +52,12 @@ export function SoldierForm({ soldier, onSubmit, onCancel }: SoldierFormProps) {
           uniformSizeTop: '',
           uniformSizeBottom: '',
           shoeSize: 42,
+          trainedRole: '',
         },
   });
 
   const currentRank = watch('rank');
+  const currentTrainedRole = watch('trainedRole');
   const currentBlood = watch('bloodType');
   const currentSizeTop = watch('uniformSizeTop');
   const currentSizeBottom = watch('uniformSizeBottom');
@@ -180,6 +183,18 @@ export function SoldierForm({ soldier, onSubmit, onCancel }: SoldierFormProps) {
                 <SelectItem value="__none__">ללא</SelectItem>
                 {platoons?.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>תפקיד בטנק</Label>
+            <Select value={currentTrainedRole || '__none__'} onValueChange={(v) => setValue('trainedRole', (v === '__none__' ? '' : v) as '' | 'commander' | 'gunner' | 'driver' | 'loader')}>
+              <SelectTrigger><SelectValue placeholder="בחר תפקיד" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">ללא</SelectItem>
+                {CREW_ROLES.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
