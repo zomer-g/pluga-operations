@@ -21,8 +21,8 @@ export function useSoldiers(filters?: SoldierFilters) {
         (s) =>
           s.firstName.toLowerCase().includes(q) ||
           s.lastName.toLowerCase().includes(q) ||
-          s.militaryId.includes(q) ||
-          s.phoneNumber.includes(q)
+          (s.militaryId || '').includes(q) ||
+          (s.phoneNumber || '').includes(q)
       );
     }
 

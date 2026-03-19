@@ -49,19 +49,19 @@ export type AssignmentType = 'tank_role' | 'general_mission';
 
 export interface Soldier {
   id: string;
-  militaryId: string;
+  militaryId?: string;
   firstName: string;
   lastName: string;
-  rank: SoldierRank;
-  phoneNumber: string;
-  emergencyContact: string;
-  emergencyPhone: string;
+  rank?: SoldierRank;
+  phoneNumber?: string;
+  emergencyContact?: string;
+  emergencyPhone?: string;
   email?: string;
-  bloodType: BloodType;
+  bloodType?: BloodType;
   medicalNotes?: string;
-  uniformSizeTop: ClothingSize;
-  uniformSizeBottom: ClothingSize;
-  shoeSize: number;
+  uniformSizeTop?: ClothingSize;
+  uniformSizeBottom?: ClothingSize;
+  shoeSize?: number;
   helmetSize?: string;
   platoonId?: string;
   squadId?: string;

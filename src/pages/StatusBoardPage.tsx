@@ -138,7 +138,7 @@ export function StatusBoardPage() {
                   return (
                     <div key={soldier.id} className="flex items-center gap-3 h-8">
                       <div className="w-40 shrink-0 text-sm truncate">
-                        {getRankLabel(soldier.rank)} {soldier.firstName} {soldier.lastName[0]}'
+                        {soldier.rank ? getRankLabel(soldier.rank) : ''} {soldier.firstName} {soldier.lastName[0]}'
                       </div>
                       <div className="flex-1 relative h-6 bg-card rounded border">
                         {/* Today line */}

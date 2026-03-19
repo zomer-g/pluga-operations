@@ -42,7 +42,7 @@ export function TanksPage() {
 
   const getSoldierName = (soldierId: string) => {
     const s = soldiers?.find((s) => s.id === soldierId);
-    return s ? `${getRankLabel(s.rank)} ${s.firstName} ${s.lastName}` : '';
+    return s ? `${s.rank ? getRankLabel(s.rank) : ''} ${s.firstName} ${s.lastName}`.trim() : '';
   };
 
   const assignedSoldierIds = new Set(allCrew?.map((a) => a.soldierId) ?? []);
@@ -227,7 +227,7 @@ export function TanksPage() {
                 <SelectContent>
                   {availableSoldiers.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {getRankLabel(s.rank)} {s.firstName} {s.lastName}
+                      {s.rank ? getRankLabel(s.rank) : ''} {s.firstName} {s.lastName}
                     </SelectItem>
                   ))}
                 </SelectContent>

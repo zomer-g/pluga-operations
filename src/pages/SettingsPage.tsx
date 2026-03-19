@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Download, Upload, Plus, Trash2, Moon, Sun, Database } from 'lucide-react';
+import { Download, Upload, Plus, Trash2, Moon, Sun, Database, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,58 @@ export function SettingsPage() {
   const [platoonName, setPlatoonName] = useState('');
   const [platoonNumber, setPlatoonNumber] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Legacy import
+  const legacyRefs = {
+    soldiers: useRef<HTMLInputElement>(null),
+    departments: useRef<HTMLInputElement>(null),
+    tanks: useRef<HTMLInputElement>(null),
+    statuses: useRef<HTMLInputElement>(null),
+    assignments: useRef<HTMLInputElement>(null),
+  };
+  const [legacyStatus, setLegacyStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [legacyLoading, setLegacyLoading] = useState(false);
+
+  const handleLegacyImport = async () => {
+    const readFile = async (ref: React.RefObject<HTMLInputElement | null>) => {
+      const file = ref.current?.files?.[0];
+      if (!file) return null;
+      return file.text();
+    };
+
+    const [soldiersCsv, deptsCsv, tanksCsv, statusesCsv, assignmentsCsv] = await Promise.all([
+      readFile(legacyRefs.soldiers),
+      readFile(legacyRefs.departments),
+      readFile(legacyRefs.tanks),
+      readFile(legacyRefs.statuses),
+      readFile(legacyRefs.assignments),
+    ]);
+
+    if (!soldiersCsv) {
+      setLegacyStatus({ type: 'error', message: 'קובץ חיילים נדרש לפחות' });
+      return;
+    }
+
+    setLegacyLoading(true);
+    try {
+      const { importLegacyData } = await import('@/db/import-legacy');
+      const result = await importLegacyData({
+        soldiers: soldiersCsv,
+        departments: deptsCsv ?? '',
+        tanks: tanksCsv ?? '',
+        statuses: statusesCsv ?? '',
+        assignments: assignmentsCsv ?? '',
+      });
+      const c = result.counts;
+      setLegacyStatus({
+        type: 'success',
+        message: `${result.message}: ${c.soldiers} חיילים, ${c.platoons} מחלקות, ${c.tanks} טנקים, ${c.shampafEntries} שמ"פ, ${c.assignments} שיבוצים`,
+      });
+    } catch (err) {
+      setLegacyStatus({ type: 'error', message: 'שגיאה בייבוא: ' + (err instanceof Error ? err.message : String(err)) });
+    }
+    setLegacyLoading(false);
+  };
 
   const handleExport = async () => {
     const json = await exportData();
@@ -149,6 +201,54 @@ export function SettingsPage() {
               }`}
             >
               {importStatus.message}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Legacy import */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FileUp className="h-5 w-5" />
+            ייבוא ממערכת ישנה
+          </CardTitle>
+          <CardDescription>ייבוא קבצי CSV מהמערכת הקודמת. שים לב: הנתונים הקיימים יוחלפו!</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">חיילים (חובה)</Label>
+              <Input ref={legacyRefs.soldiers} type="file" accept=".csv" className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">מחלקות</Label>
+              <Input ref={legacyRefs.departments} type="file" accept=".csv" className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">טנקים</Label>
+              <Input ref={legacyRefs.tanks} type="file" accept=".csv" className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">סטטוסים (שמ"פ)</Label>
+              <Input ref={legacyRefs.statuses} type="file" accept=".csv" className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">שיבוצים</Label>
+              <Input ref={legacyRefs.assignments} type="file" accept=".csv" className="h-9 text-sm" />
+            </div>
+          </div>
+          <Button onClick={handleLegacyImport} disabled={legacyLoading} className="w-full">
+            <FileUp className="h-4 w-4 me-2" />
+            {legacyLoading ? 'מייבא...' : 'ייבא נתונים'}
+          </Button>
+          {legacyStatus && (
+            <div className={`p-3 rounded-lg text-sm ${
+              legacyStatus.type === 'success'
+                ? 'bg-status-active/10 text-status-active'
+                : 'bg-destructive/10 text-destructive'
+            }`}>
+              {legacyStatus.message}
             </div>
           )}
         </CardContent>

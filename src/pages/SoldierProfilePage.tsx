@@ -52,9 +52,9 @@ export function SoldierProfilePage() {
         </Button>
         <div className="flex-1">
           <h2 className="text-xl md:text-2xl font-bold">
-            {getRankLabel(soldier.rank)} {soldier.firstName} {soldier.lastName}
+            {soldier.rank ? getRankLabel(soldier.rank) : ''} {soldier.firstName} {soldier.lastName}
           </h2>
-          <p className="text-sm text-muted-foreground">מ.א: {soldier.militaryId}</p>
+          <p className="text-sm text-muted-foreground">מ.א: {soldier.militaryId ?? '-'}</p>
         </div>
         <div className="flex items-center gap-2">
           {statusInfo && (
@@ -113,16 +113,16 @@ export function SoldierProfilePage() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <InfoItem label="שם פרטי" value={soldier.firstName} />
                   <InfoItem label="שם משפחה" value={soldier.lastName} />
-                  <InfoItem label="דרגה" value={getRankLabel(soldier.rank)} />
-                  <InfoItem label="מספר אישי" value={soldier.militaryId} />
-                  <InfoItem label="טלפון" value={soldier.phoneNumber} dir="ltr" />
+                  <InfoItem label="דרגה" value={soldier.rank ? getRankLabel(soldier.rank) : '-'} />
+                  <InfoItem label="מספר אישי" value={soldier.militaryId ?? '-'} />
+                  <InfoItem label="טלפון" value={soldier.phoneNumber ?? '-'} dir="ltr" />
                   <InfoItem label="אימייל" value={soldier.email ?? '-'} dir="ltr" />
-                  <InfoItem label="איש קשר חירום" value={soldier.emergencyContact} />
-                  <InfoItem label="טלפון חירום" value={soldier.emergencyPhone} dir="ltr" />
-                  <InfoItem label="סוג דם" value={soldier.bloodType} />
-                  <InfoItem label="מידת חולצה" value={soldier.uniformSizeTop} />
-                  <InfoItem label="מידת מכנסיים" value={soldier.uniformSizeBottom} />
-                  <InfoItem label="מידת נעליים" value={String(soldier.shoeSize)} />
+                  <InfoItem label="איש קשר חירום" value={soldier.emergencyContact ?? '-'} />
+                  <InfoItem label="טלפון חירום" value={soldier.emergencyPhone ?? '-'} dir="ltr" />
+                  <InfoItem label="סוג דם" value={soldier.bloodType ?? '-'} />
+                  <InfoItem label="מידת חולצה" value={soldier.uniformSizeTop ?? '-'} />
+                  <InfoItem label="מידת מכנסיים" value={soldier.uniformSizeBottom ?? '-'} />
+                  <InfoItem label="מידת נעליים" value={soldier.shoeSize != null ? String(soldier.shoeSize) : '-'} />
                   <InfoItem label="מידת קסדה" value={soldier.helmetSize ?? '-'} />
                 </div>
                 {soldier.medicalNotes && (

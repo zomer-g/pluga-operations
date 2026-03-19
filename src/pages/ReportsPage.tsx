@@ -27,16 +27,16 @@ export function ReportsPage() {
     const rows = soldiers.map((s) => {
       const status = currentStatuses?.get(s.id);
       return [
-        s.militaryId,
-        getRankLabel(s.rank),
+        s.militaryId ?? '',
+        s.rank ? getRankLabel(s.rank) : '',
         s.firstName,
         s.lastName,
-        s.phoneNumber,
+        s.phoneNumber ?? '',
         s.email ?? '',
-        s.bloodType,
-        s.uniformSizeTop,
-        s.uniformSizeBottom,
-        String(s.shoeSize),
+        s.bloodType ?? '',
+        s.uniformSizeTop ?? '',
+        s.uniformSizeBottom ?? '',
+        s.shoeSize != null ? String(s.shoeSize) : '',
         status ? getStatusInfo(status.status).label : '',
       ];
     });

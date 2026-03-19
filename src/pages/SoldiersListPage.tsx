@@ -101,10 +101,10 @@ export function SoldiersListPage() {
                       </div>
                       <div>
                         <p className="font-medium">
-                          {getRankLabel(soldier.rank)} {soldier.firstName} {soldier.lastName}
+                          {soldier.rank ? getRankLabel(soldier.rank) : ''} {soldier.firstName} {soldier.lastName}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          מ.א: {soldier.militaryId} | {soldier.phoneNumber}
+                          מ.א: {soldier.militaryId ?? '-'} | {soldier.phoneNumber ?? '-'}
                         </p>
                       </div>
                     </div>
