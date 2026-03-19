@@ -11,6 +11,7 @@ import type {
   ShampafEntry,
   ShampafVacation,
   Assignment,
+  Activation,
 } from './schema';
 
 const db = new Dexie('PlugaOperationsDB') as Dexie & {
@@ -25,6 +26,7 @@ const db = new Dexie('PlugaOperationsDB') as Dexie & {
   shampafEntries: EntityTable<ShampafEntry, 'id'>;
   shampafVacations: EntityTable<ShampafVacation, 'id'>;
   assignments: EntityTable<Assignment, 'id'>;
+  activations: EntityTable<Activation, 'id'>;
 };
 
 db.version(1).stores({
@@ -43,6 +45,10 @@ db.version(2).stores({
   shampafEntries: 'id, soldierId, startDateTime, endDateTime',
   shampafVacations: 'id, shampafEntryId, soldierId, startDateTime, endDateTime',
   assignments: 'id, soldierId, type, tankId, role, startDateTime, endDateTime',
+});
+
+db.version(3).stores({
+  activations: 'id, startDate, endDate',
 });
 
 export { db };

@@ -134,6 +134,16 @@ export interface Squad {
   leaderId?: string;
 }
 
+// ===== הפעלה (Activation) =====
+
+export interface Activation {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  notes?: string;
+}
+
 // ===== שמ"פ & שיבוץ =====
 
 export interface ShampafEntry {

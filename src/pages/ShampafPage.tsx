@@ -1,33 +1,66 @@
-import { useMemo } from 'react';
-import { CalendarClock } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { CalendarClock, Plus, Settings2, Trash2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ShampafTable } from '@/components/shampaf/ShampafTable';
 import { GanttChart } from '@/components/gantt/GanttChart';
 import type { GanttRow } from '@/components/gantt/GanttChart';
 import { useShampafEntries, useAllShampafVacations } from '@/hooks/useShampaf';
+import { useActivations, useCurrentActivation, addActivation, deleteActivation } from '@/hooks/useActivation';
 import { useSoldiers } from '@/hooks/useSoldiers';
 import { SHAMPAF_COLORS } from '@/lib/constants';
+import { formatDate, dateRangesOverlap, todayString } from '@/lib/utils';
 
 export function ShampafPage() {
-  const entries = useShampafEntries();
+  const allEntries = useShampafEntries();
   const vacations = useAllShampafVacations();
   const soldiers = useSoldiers();
+  const activations = useActivations();
+  const currentActivation = useCurrentActivation();
 
-  // Default date range: -7 days to +30 days
-  const today = new Date();
-  const defaultStart = new Date(today);
-  defaultStart.setDate(defaultStart.getDate() - 7);
-  const defaultEnd = new Date(today);
-  defaultEnd.setDate(defaultEnd.getDate() + 30);
+  // Activation dialog
+  const [showActivationDialog, setShowActivationDialog] = useState(false);
+  const [actName, setActName] = useState('');
+  const [actStart, setActStart] = useState(todayString());
+  const [actEnd, setActEnd] = useState('');
 
-  const defaultStartStr = defaultStart.toISOString().split('T')[0]!;
-  const defaultEndStr = defaultEnd.toISOString().split('T')[0]!;
+  // Selected activation (default to current)
+  const [selectedActivationId, setSelectedActivationId] = useState<string | null>(null);
 
-  // Build Gantt rows: group by soldier
+  const activeActivation = selectedActivationId
+    ? activations?.find(a => a.id === selectedActivationId) ?? currentActivation
+    : currentActivation;
+
+  // Filter entries by activation date range
+  const entries = useMemo(() => {
+    if (!allEntries) return [];
+    if (!activeActivation) return allEntries;
+    return allEntries.filter(e =>
+      dateRangesOverlap(
+        e.startDateTime.split('T')[0]!,
+        e.endDateTime.split('T')[0]!,
+        activeActivation.startDate,
+        activeActivation.endDate
+      )
+    );
+  }, [allEntries, activeActivation]);
+
+  // Gantt date range from activation
+  const ganttStart = activeActivation?.startDate ?? todayString();
+  const ganttEnd = activeActivation?.endDate ?? (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0]!;
+  })();
+
+  // Build Gantt rows
   const ganttRows = useMemo<GanttRow[]>(() => {
     if (!entries || !vacations || !soldiers) return [];
 
-    // Get unique soldier IDs that have shampaf entries
     const soldierIds = [...new Set(entries.map((e) => e.soldierId))];
 
     return soldierIds
@@ -39,36 +72,82 @@ export function ShampafPage() {
         const soldierVacations = vacations.filter((v) => v.soldierId === soldierId);
 
         const bars = [
-          // Green bars for mobilization periods
           ...soldierEntries.map((entry) => ({
             id: entry.id,
             startDateTime: entry.startDateTime,
             endDateTime: entry.endDateTime,
             color: SHAMPAF_COLORS.mobilized,
-            tooltip: `שמ"פ: ${new Date(entry.startDateTime).toLocaleDateString('he-IL')} - ${new Date(entry.endDateTime).toLocaleDateString('he-IL')}`,
+            tooltip: `שמ"פ: ${formatDate(entry.startDateTime.split('T')[0]!)} - ${formatDate(entry.endDateTime.split('T')[0]!)}`,
           })),
-          // Amber bars for vacation periods (overlay)
           ...soldierVacations.map((vac) => ({
             id: vac.id,
             startDateTime: vac.startDateTime,
             endDateTime: vac.endDateTime,
             color: SHAMPAF_COLORS.vacation,
-            tooltip: `חופשה: ${vac.reason || ''} ${new Date(vac.startDateTime).toLocaleDateString('he-IL')} - ${new Date(vac.endDateTime).toLocaleDateString('he-IL')}`,
+            tooltip: `חופשה: ${vac.reason || ''} ${formatDate(vac.startDateTime.split('T')[0]!)} - ${formatDate(vac.endDateTime.split('T')[0]!)}`,
           })),
         ];
 
         return {
           id: soldierId,
-          label: `${soldier.firstName} ${soldier.lastName[0]}'`,
+          label: `${soldier.firstName} ${soldier.lastName}`,
           bars,
         };
       })
       .filter(Boolean) as GanttRow[];
   }, [entries, vacations, soldiers]);
 
+  const handleAddActivation = async () => {
+    if (!actName || !actStart || !actEnd) return;
+    await addActivation({ name: actName, startDate: actStart, endDate: actEnd });
+    setShowActivationDialog(false);
+    setActName('');
+    setActStart(todayString());
+    setActEnd('');
+  };
+
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold">שמ"פ - שירות מילואים פעיל</h2>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-2xl font-bold">שמ"פ - שירות מילואים פעיל</h2>
+        <Button variant="outline" size="sm" onClick={() => setShowActivationDialog(true)}>
+          <Settings2 className="h-4 w-4 me-1" />
+          הפעלה
+        </Button>
+      </div>
+
+      {/* Activation selector bar */}
+      {activations && activations.length > 0 && (
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm font-medium text-muted-foreground">הפעלה:</span>
+              {activations.map((act) => (
+                <button
+                  key={act.id}
+                  onClick={() => setSelectedActivationId(act.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors touch-target ${
+                    (activeActivation?.id === act.id)
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card border hover:bg-muted'
+                  }`}
+                >
+                  {act.name} ({formatDate(act.startDate)} - {formatDate(act.endDate)})
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No activation message */}
+      {activations && activations.length === 0 && (
+        <Card>
+          <CardContent className="p-4 text-center text-muted-foreground">
+            <p className="text-sm">לא הוגדרה הפעלה. לחץ "הפעלה" כדי ליצור תקופת הפעלה חדשה.</p>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="table" dir="rtl">
         <TabsList>
@@ -78,11 +157,7 @@ export function ShampafPage() {
 
         <TabsContent value="table">
           {entries && vacations && soldiers ? (
-            <ShampafTable
-              entries={entries}
-              vacations={vacations}
-              soldiers={soldiers}
-            />
+            <ShampafTable entries={entries} vacations={vacations ?? []} soldiers={soldiers} />
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <CalendarClock className="h-12 w-12 mx-auto mb-3 opacity-40" />
@@ -92,7 +167,6 @@ export function ShampafPage() {
         </TabsContent>
 
         <TabsContent value="gantt">
-          {/* Legend */}
           <div className="flex flex-wrap gap-3 mb-3">
             <div className="flex items-center gap-1">
               <div className={`h-3 w-3 rounded-full ${SHAMPAF_COLORS.mobilized}`} />
@@ -103,15 +177,59 @@ export function ShampafPage() {
               <span className="text-xs">חופשה</span>
             </div>
           </div>
-
-          <GanttChart
-            rows={ganttRows}
-            startDate={defaultStartStr}
-            endDate={defaultEndStr}
-            showTodayMarker
-          />
+          <GanttChart rows={ganttRows} startDate={ganttStart} endDate={ganttEnd} showTodayMarker />
         </TabsContent>
       </Tabs>
+
+      {/* Activation dialog */}
+      <Dialog open={showActivationDialog} onOpenChange={setShowActivationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ניהול הפעלות</DialogTitle>
+            <DialogDescription>הפעלה מגדירה את תקופת הפעילות. הנתונים יוצגו לפי תקופה זו.</DialogDescription>
+          </DialogHeader>
+
+          {/* Existing activations */}
+          {activations && activations.length > 0 && (
+            <div className="space-y-2 mb-4">
+              <Label className="text-xs text-muted-foreground">הפעלות קיימות</Label>
+              {activations.map((act) => (
+                <div key={act.id} className="flex items-center justify-between p-2 rounded border text-sm">
+                  <span>{act.name} — {formatDate(act.startDate)} עד {formatDate(act.endDate)}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteActivation(act.id)}>
+                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <Label className="text-xs text-muted-foreground">הפעלה חדשה</Label>
+            <div className="space-y-2">
+              <Input value={actName} onChange={(e) => setActName(e.target.value)} placeholder='שם, למשל: "מבצע מגן"' />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">התחלה</Label>
+                <Input type="date" value={actStart} onChange={(e) => setActStart(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">סיום</Label>
+                <Input type="date" value={actEnd} onChange={(e) => setActEnd(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowActivationDialog(false)}>סגור</Button>
+            <Button onClick={handleAddActivation} disabled={!actName || !actStart || !actEnd}>
+              <Plus className="h-4 w-4 me-1" />
+              צור הפעלה
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
