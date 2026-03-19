@@ -1,8 +1,10 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/database';
-import type { Assignment, CrewRole } from '@/db/schema';
+import { useState, useEffect } from 'react';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, getDoc } from 'firebase/firestore';
+import { db } from '@/firebase';
+import type { Assignment, CrewRole, ShampafEntry, ShampafVacation } from '@/db/schema';
 import { generateId, dateRangesOverlap } from '@/lib/utils';
 import { getSoldierShampafStatusAt } from './useShampaf';
+import { useCacheEnabled } from '@/stores/useAppStore';
 
 // ===== Queries =====
 
@@ -14,78 +16,106 @@ interface AssignmentFilters {
 }
 
 export function useAssignments(filters?: AssignmentFilters) {
-  return useLiveQuery(async () => {
-    let results = await db.assignments.toArray();
+  const [assignments, setAssignments] = useState<Assignment[] | undefined>();
+  const enabled = useCacheEnabled('assignments');
 
-    if (filters?.soldierId) {
-      results = results.filter(a => a.soldierId === filters.soldierId);
-    }
-    if (filters?.tankId) {
-      results = results.filter(a => a.tankId === filters.tankId);
-    }
-    if (filters?.startDate && filters?.endDate) {
-      results = results.filter(a =>
-        dateRangesOverlap(a.startDateTime, a.endDateTime, filters.startDate!, filters.endDate!)
-      );
-    }
+  useEffect(() => {
+    if (!enabled) { setAssignments(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'assignments'), (snap) => {
+      let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
 
-    return results;
-  }, [filters?.soldierId, filters?.tankId, filters?.startDate, filters?.endDate]);
+      if (filters?.soldierId) {
+        results = results.filter(a => a.soldierId === filters.soldierId);
+      }
+      if (filters?.tankId) {
+        results = results.filter(a => a.tankId === filters.tankId);
+      }
+      if (filters?.startDate && filters?.endDate) {
+        results = results.filter(a =>
+          dateRangesOverlap(a.startDateTime, a.endDateTime, filters.startDate!, filters.endDate!)
+        );
+      }
+
+      setAssignments(results);
+    });
+    return unsub;
+  }, [enabled, filters?.soldierId, filters?.tankId, filters?.startDate, filters?.endDate]);
+
+  return assignments;
 }
 
 export function useTankAssignmentsAt(tankId: string | undefined, dateTime?: string) {
-  return useLiveQuery(async () => {
-    if (!tankId) return [];
-    const now = dateTime ?? new Date().toISOString();
-    const all = await db.assignments
-      .where('tankId')
-      .equals(tankId)
-      .toArray();
-    return all.filter(a => a.startDateTime <= now && a.endDateTime >= now);
-  }, [tankId, dateTime]);
+  const [assignments, setAssignments] = useState<Assignment[] | undefined>();
+  const enabled = useCacheEnabled('assignments');
+
+  useEffect(() => {
+    if (!enabled) { setAssignments(undefined); return; }
+    if (!tankId) {
+      setAssignments([]);
+      return;
+    }
+    const q = query(collection(db, 'assignments'), where('tankId', '==', tankId));
+    const unsub = onSnapshot(q, (snap) => {
+      const now = dateTime ?? new Date().toISOString();
+      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
+      setAssignments(all.filter(a => a.startDateTime <= now && a.endDateTime >= now));
+    });
+    return unsub;
+  }, [enabled, tankId, dateTime]);
+
+  return assignments;
 }
 
 export type ConflictType = 'no_shampaf' | 'on_vacation';
 
 export function useAssignmentConflicts() {
-  return useLiveQuery(async () => {
-    const assignments = await db.assignments.toArray();
-    const now = new Date().toISOString();
-    const activeAssignments = assignments.filter(a => a.endDateTime >= now);
+  const [conflicts, setConflicts] = useState<Map<string, ConflictType[]> | undefined>();
+  const enabled = useCacheEnabled('assignments');
 
-    const conflicts = new Map<string, ConflictType[]>();
+  useEffect(() => {
+    if (!enabled) { setConflicts(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'assignments'), async (snap) => {
+      const assignments = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
+      const now = new Date().toISOString();
+      const activeAssignments = assignments.filter(a => a.endDateTime >= now);
 
-    for (const a of activeAssignments) {
-      const shampafEntries = await db.shampafEntries
-        .where('soldierId')
-        .equals(a.soldierId)
-        .toArray();
+      const result = new Map<string, ConflictType[]>();
 
-      const covering = shampafEntries.find(e =>
-        e.startDateTime <= a.startDateTime && e.endDateTime >= a.endDateTime
-      );
+      // Get all shampaf entries and vacations for batch processing
+      const shampafSnap = await getDocs(collection(db, 'shampafEntries'));
+      const allShampafEntries = shampafSnap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
 
-      if (!covering) {
-        conflicts.set(a.id, ['no_shampaf']);
-        continue;
+      const vacSnap = await getDocs(collection(db, 'shampafVacations'));
+      const allVacations = vacSnap.docs.map(d => d.data() as ShampafVacation);
+
+      for (const a of activeAssignments) {
+        const soldierEntries = allShampafEntries.filter(e => e.soldierId === a.soldierId);
+
+        const covering = soldierEntries.find(e =>
+          e.startDateTime <= a.startDateTime && e.endDateTime >= a.endDateTime
+        );
+
+        if (!covering) {
+          result.set(a.id, ['no_shampaf']);
+          continue;
+        }
+
+        const entryVacations = allVacations.filter(v => v.shampafEntryId === covering.id);
+        const onVacation = entryVacations.some(v =>
+          dateRangesOverlap(v.startDateTime, v.endDateTime, a.startDateTime, a.endDateTime)
+        );
+
+        if (onVacation) {
+          result.set(a.id, ['on_vacation']);
+        }
       }
 
-      const vacations = await db.shampafVacations
-        .where('shampafEntryId')
-        .equals(covering.id)
-        .toArray();
+      setConflicts(result);
+    });
+    return unsub;
+  }, [enabled]);
 
-      const onVacation = vacations.some(v =>
-        dateRangesOverlap(v.startDateTime, v.endDateTime, a.startDateTime, a.endDateTime)
-      );
-
-      if (onVacation) {
-        conflicts.set(a.id, ['on_vacation']);
-      }
-    }
-
-    return conflicts;
-  });
+  return conflicts;
 }
 
 // ===== Mutations =====
@@ -109,9 +139,12 @@ export async function addAssignment(data: {
 
   // Check role constraints
   if (data.type === 'tank_role' && data.role) {
-    const soldier = await db.soldiers.get(data.soldierId);
-    if (soldier?.trainedRole && soldier.trainedRole !== 'commander' && soldier.trainedRole !== data.role) {
-      warnings.push(`החייל מאומן כ${soldier.trainedRole} ושובץ כ${data.role}`);
+    const soldierSnap = await getDoc(doc(db, 'soldiers', data.soldierId));
+    if (soldierSnap.exists()) {
+      const soldier = soldierSnap.data() as { trainedRole?: string };
+      if (soldier.trainedRole && soldier.trainedRole !== 'commander' && soldier.trainedRole !== data.role) {
+        warnings.push(`החייל מאומן כ${soldier.trainedRole} ושובץ כ${data.role}`);
+      }
     }
   }
 
@@ -135,15 +168,15 @@ export async function addAssignment(data: {
     endDateTime: data.endDateTime,
     notes: data.notes,
   };
-  await db.assignments.add(assignment);
+  await setDoc(doc(db, 'assignments', id), assignment);
 
   return { id, warnings };
 }
 
 export async function updateAssignment(id: string, data: Partial<Assignment>): Promise<void> {
-  await db.assignments.update(id, data);
+  await updateDoc(doc(db, 'assignments', id), data);
 }
 
 export async function deleteAssignment(id: string): Promise<void> {
-  await db.assignments.delete(id);
+  await deleteDoc(doc(db, 'assignments', id));
 }

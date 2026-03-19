@@ -1,59 +1,125 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/database';
+import { useState, useEffect } from 'react';
+import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
+import { db } from '@/firebase';
 import type { Tank, TankCrewAssignment, CrewRole } from '@/db/schema';
 import { generateId } from '@/lib/utils';
 import type { TankFormData, CrewAssignFormData } from '@/lib/validators';
+import { useCacheEnabled } from '@/stores/useAppStore';
 
 export function useTanks(platoonId?: string) {
-  return useLiveQuery(async () => {
-    if (platoonId) {
-      return db.tanks.where('platoonId').equals(platoonId).toArray();
-    }
-    return db.tanks.orderBy('designation').toArray();
-  }, [platoonId]);
+  const [tanks, setTanks] = useState<Tank[] | undefined>();
+  const enabled = useCacheEnabled('tanks');
+
+  useEffect(() => {
+    if (!enabled) { setTanks(undefined); return; }
+    const q = platoonId
+      ? query(collection(db, 'tanks'), where('platoonId', '==', platoonId))
+      : query(collection(db, 'tanks'), orderBy('designation'));
+    const unsub = onSnapshot(q, (snap) => {
+      setTanks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Tank)));
+    });
+    return unsub;
+  }, [enabled, platoonId]);
+
+  return tanks;
 }
 
 export function useTank(id: string | undefined) {
-  return useLiveQuery(() => (id ? db.tanks.get(id) : undefined), [id]);
+  const [tank, setTank] = useState<Tank | undefined>();
+  const enabled = useCacheEnabled('tanks');
+
+  useEffect(() => {
+    if (!enabled || !id) {
+      setTank(undefined);
+      return;
+    }
+    const unsub = onSnapshot(doc(db, 'tanks', id), (snap) => {
+      if (snap.exists()) {
+        setTank({ ...snap.data(), id: snap.id } as Tank);
+      } else {
+        setTank(undefined);
+      }
+    });
+    return unsub;
+  }, [enabled, id]);
+
+  return tank;
 }
 
 export function useTankCount() {
-  return useLiveQuery(async () => {
-    const tanks = await db.tanks.toArray();
-    return {
-      total: tanks.length,
-      operational: tanks.filter((t) => t.status === 'operational').length,
-    };
-  });
+  const [counts, setCounts] = useState<{ total: number; operational: number } | undefined>();
+  const enabled = useCacheEnabled('tanks');
+
+  useEffect(() => {
+    if (!enabled) { setCounts(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'tanks'), (snap) => {
+      const tanks = snap.docs.map(d => d.data() as Tank);
+      setCounts({
+        total: tanks.length,
+        operational: tanks.filter(t => t.status === 'operational').length,
+      });
+    });
+    return unsub;
+  }, [enabled]);
+
+  return counts;
 }
 
 export function useTankCrew(tankId: string | undefined) {
-  return useLiveQuery(async () => {
-    if (!tankId) return [];
-    const assignments = await db.tankCrewAssignments
-      .where('tankId')
-      .equals(tankId)
-      .toArray();
-    return assignments.filter((a) => !a.endDate);
-  }, [tankId]);
+  const [crew, setCrew] = useState<TankCrewAssignment[] | undefined>();
+  const enabled = useCacheEnabled('tanks');
+
+  useEffect(() => {
+    if (!enabled) { setCrew(undefined); return; }
+    if (!tankId) {
+      setCrew([]);
+      return;
+    }
+    const q = query(collection(db, 'tankCrewAssignments'), where('tankId', '==', tankId));
+    const unsub = onSnapshot(q, (snap) => {
+      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as TankCrewAssignment));
+      setCrew(all.filter(a => !a.endDate));
+    });
+    return unsub;
+  }, [enabled, tankId]);
+
+  return crew;
 }
 
 export function useSoldierCrewAssignment(soldierId: string | undefined) {
-  return useLiveQuery(async () => {
-    if (!soldierId) return undefined;
-    const assignments = await db.tankCrewAssignments
-      .where('soldierId')
-      .equals(soldierId)
-      .toArray();
-    return assignments.find((a) => !a.endDate);
-  }, [soldierId]);
+  const [assignment, setAssignment] = useState<TankCrewAssignment | undefined>();
+  const enabled = useCacheEnabled('tanks');
+
+  useEffect(() => {
+    if (!enabled || !soldierId) {
+      setAssignment(undefined);
+      return;
+    }
+    const q = query(collection(db, 'tankCrewAssignments'), where('soldierId', '==', soldierId));
+    const unsub = onSnapshot(q, (snap) => {
+      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as TankCrewAssignment));
+      setAssignment(all.find(a => !a.endDate));
+    });
+    return unsub;
+  }, [enabled, soldierId]);
+
+  return assignment;
 }
 
 export function useAllCrewAssignments() {
-  return useLiveQuery(async () => {
-    const all = await db.tankCrewAssignments.toArray();
-    return all.filter((a) => !a.endDate);
-  });
+  const [assignments, setAssignments] = useState<TankCrewAssignment[] | undefined>();
+  const enabled = useCacheEnabled('tanks');
+
+  useEffect(() => {
+    if (!enabled) { setAssignments(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'tankCrewAssignments'), (snap) => {
+      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as TankCrewAssignment));
+      setAssignments(all.filter(a => !a.endDate));
+    });
+    return unsub;
+  }, [enabled]);
+
+  return assignments;
 }
 
 export async function addTank(data: TankFormData): Promise<string> {
@@ -66,19 +132,24 @@ export async function addTank(data: TankFormData): Promise<string> {
     status: data.status as Tank['status'],
     notes: data.notes || undefined,
   };
-  await db.tanks.add(tank);
+  await setDoc(doc(db, 'tanks', id), tank);
   return id;
 }
 
 export async function updateTank(id: string, data: TankFormData): Promise<void> {
-  await db.tanks.update(id, { ...data, platoonId: data.platoonId || undefined, notes: data.notes || undefined } as Partial<Tank>);
+  await updateDoc(doc(db, 'tanks', id), { ...data, platoonId: data.platoonId || undefined, notes: data.notes || undefined });
 }
 
 export async function deleteTank(id: string): Promise<void> {
-  await db.transaction('rw', db.tanks, db.tankCrewAssignments, async () => {
-    await db.tanks.delete(id);
-    await db.tankCrewAssignments.where('tankId').equals(id).delete();
-  });
+  const batch = writeBatch(db);
+
+  batch.delete(doc(db, 'tanks', id));
+
+  // Cascade: delete crew assignments for this tank
+  const crewSnap = await getDocs(query(collection(db, 'tankCrewAssignments'), where('tankId', '==', id)));
+  crewSnap.docs.forEach(d => batch.delete(d.ref));
+
+  await batch.commit();
 }
 
 export async function assignCrew(
@@ -86,57 +157,72 @@ export async function assignCrew(
   data: CrewAssignFormData
 ): Promise<string> {
   const id = generateId();
+  const batch = writeBatch(db);
 
-  await db.transaction('rw', db.tankCrewAssignments, async () => {
-    // Remove soldier from any existing crew
-    const existing = await db.tankCrewAssignments
-      .where('soldierId')
-      .equals(data.soldierId)
-      .filter((a) => !a.endDate)
-      .toArray();
-    for (const a of existing) {
-      await db.tankCrewAssignments.update(a.id, { endDate: data.startDate });
+  // Remove soldier from any existing crew
+  const existingSnap = await getDocs(
+    query(collection(db, 'tankCrewAssignments'), where('soldierId', '==', data.soldierId))
+  );
+  for (const d of existingSnap.docs) {
+    const a = d.data() as TankCrewAssignment;
+    if (!a.endDate) {
+      batch.update(d.ref, { endDate: data.startDate });
     }
+  }
 
-    // Remove anyone currently in this role on this tank
-    const roleConflict = await db.tankCrewAssignments
-      .where('tankId')
-      .equals(tankId)
-      .filter((a) => !a.endDate && a.role === data.role)
-      .toArray();
-    for (const a of roleConflict) {
-      await db.tankCrewAssignments.update(a.id, { endDate: data.startDate });
+  // Remove anyone currently in this role on this tank
+  const roleSnap = await getDocs(
+    query(collection(db, 'tankCrewAssignments'), where('tankId', '==', tankId))
+  );
+  for (const d of roleSnap.docs) {
+    const a = d.data() as TankCrewAssignment;
+    if (!a.endDate && a.role === data.role) {
+      batch.update(d.ref, { endDate: data.startDate });
     }
+  }
 
-    const assignment: TankCrewAssignment = {
-      id,
-      tankId,
-      soldierId: data.soldierId,
-      role: data.role as CrewRole,
-      startDate: data.startDate,
-    };
-    await db.tankCrewAssignments.add(assignment);
-  });
+  // Add new assignment
+  const assignment: TankCrewAssignment = {
+    id,
+    tankId,
+    soldierId: data.soldierId,
+    role: data.role as CrewRole,
+    startDate: data.startDate,
+  };
+  batch.set(doc(db, 'tankCrewAssignments', id), assignment);
 
+  await batch.commit();
   return id;
 }
 
 export async function unassignCrew(assignmentId: string): Promise<void> {
-  await db.tankCrewAssignments.update(assignmentId, {
+  await updateDoc(doc(db, 'tankCrewAssignments', assignmentId), {
     endDate: new Date().toISOString().split('T')[0],
   });
 }
 
 export function usePlatoons() {
-  return useLiveQuery(() => db.platoons.orderBy('number').toArray());
+  const [platoons, setPlatoons] = useState<{ id: string; name: string; number: number }[] | undefined>();
+  const platoonsEnabled = useCacheEnabled('platoons');
+
+  useEffect(() => {
+    if (!platoonsEnabled) { setPlatoons(undefined); return; }
+    const q = query(collection(db, 'platoons'), orderBy('number'));
+    const unsub = onSnapshot(q, (snap) => {
+      setPlatoons(snap.docs.map(d => ({ ...d.data(), id: d.id } as { id: string; name: string; number: number })));
+    });
+    return unsub;
+  }, [platoonsEnabled]);
+
+  return platoons;
 }
 
 export async function addPlatoon(name: string, number: number): Promise<string> {
   const id = generateId();
-  await db.platoons.add({ id, name, number });
+  await setDoc(doc(db, 'platoons', id), { id, name, number });
   return id;
 }
 
 export async function deletePlatoon(id: string): Promise<void> {
-  await db.platoons.delete(id);
+  await deleteDoc(doc(db, 'platoons', id));
 }

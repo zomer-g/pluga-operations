@@ -2,6 +2,7 @@ import { Outlet } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
 import { Header } from './Header';
+import { OfflineBanner } from './OfflineBanner';
 
 export function AppShell() {
   return (
@@ -12,6 +13,7 @@ export function AppShell() {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        <OfflineBanner />
         <Header />
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">

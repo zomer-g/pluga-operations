@@ -1,4 +1,5 @@
-import { db } from './database';
+import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { db } from '@/firebase';
 import type { EquipmentType, Platoon } from './schema';
 
 const defaultEquipmentTypes: EquipmentType[] = [
@@ -31,18 +32,21 @@ const defaultPlatoons: Platoon[] = [
 ];
 
 export async function seedDatabase(): Promise<void> {
-  const equipCount = await db.equipmentTypes.count();
-  if (equipCount === 0) {
-    await db.equipmentTypes.bulkAdd(defaultEquipmentTypes);
-  }
+  try {
+    const equipSnap = await getDocs(collection(db, 'equipmentTypes'));
+    if (equipSnap.empty) {
+      for (const eq of defaultEquipmentTypes) {
+        await setDoc(doc(db, 'equipmentTypes', eq.id), eq);
+      }
+    }
 
-  const platoonCount = await db.platoons.count();
-  if (platoonCount === 0) {
-    await db.platoons.bulkAdd(defaultPlatoons);
+    const platoonSnap = await getDocs(collection(db, 'platoons'));
+    if (platoonSnap.empty) {
+      for (const p of defaultPlatoons) {
+        await setDoc(doc(db, 'platoons', p.id), p);
+      }
+    }
+  } catch (err) {
+    console.warn('Seed failed (may be offline):', err);
   }
-}
-
-export async function isDatabaseEmpty(): Promise<boolean> {
-  const soldierCount = await db.soldiers.count();
-  return soldierCount === 0;
 }

@@ -1,22 +1,47 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/database';
+import { useState, useEffect } from 'react';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { db } from '@/firebase';
 import type { Activation } from '@/db/schema';
 import { generateId } from '@/lib/utils';
+import { useCacheEnabled } from '@/stores/useAppStore';
 
 export function useActivations() {
-  return useLiveQuery(() => db.activations.toArray());
+  const [activations, setActivations] = useState<Activation[] | undefined>();
+  const enabled = useCacheEnabled('activations');
+
+  useEffect(() => {
+    if (!enabled) { setActivations(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'activations'), (snap) => {
+      setActivations(snap.docs.map(d => ({ ...d.data(), id: d.id } as Activation)));
+    });
+    return unsub;
+  }, [enabled]);
+
+  return activations;
 }
 
 export function useCurrentActivation() {
-  return useLiveQuery(async () => {
-    const all = await db.activations.toArray();
-    const today = new Date().toISOString().split('T')[0]!;
-    // Find activation that covers today, or the most recent one
-    const current = all.find(a => a.startDate <= today && a.endDate >= today);
-    if (current) return current;
-    // Fallback: return the latest activation
-    return all.sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null;
-  });
+  const [activation, setActivation] = useState<Activation | null | undefined>();
+  const enabled = useCacheEnabled('activations');
+
+  useEffect(() => {
+    if (!enabled) { setActivation(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'activations'), (snap) => {
+      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Activation));
+      const today = new Date().toISOString().split('T')[0]!;
+      // Find activation that covers today, or the most recent one
+      const current = all.find(a => a.startDate <= today && a.endDate >= today);
+      if (current) {
+        setActivation(current);
+      } else {
+        // Fallback: return the latest activation
+        setActivation(all.sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null);
+      }
+    });
+    return unsub;
+  }, [enabled]);
+
+  return activation;
 }
 
 export async function addActivation(data: {
@@ -27,14 +52,14 @@ export async function addActivation(data: {
 }): Promise<string> {
   const id = generateId();
   const activation: Activation = { id, ...data };
-  await db.activations.add(activation);
+  await setDoc(doc(db, 'activations', id), activation);
   return id;
 }
 
 export async function updateActivation(id: string, data: Partial<Activation>): Promise<void> {
-  await db.activations.update(id, data);
+  await updateDoc(doc(db, 'activations', id), data);
 }
 
 export async function deleteActivation(id: string): Promise<void> {
-  await db.activations.delete(id);
+  await deleteDoc(doc(db, 'activations', id));
 }

@@ -1,16 +1,28 @@
 import { useState, useRef } from 'react';
-import { Download, Upload, Plus, Trash2, Moon, Sun, Database, FileUp } from 'lucide-react';
+import { Download, Upload, Plus, Trash2, Moon, Sun, Database, FileUp, HardDrive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { useAppStore } from '@/stores/useAppStore';
+import { useAppStore, type CacheCategory } from '@/stores/useAppStore';
 import { exportData, importData, downloadBackup } from '@/db/backup';
 import { usePlatoons, addPlatoon, deletePlatoon } from '@/hooks/useTanks';
 
+const CACHE_CATEGORIES: { key: CacheCategory; label: string }[] = [
+  { key: 'soldiers', label: 'חיילים' },
+  { key: 'tanks', label: 'טנקים' },
+  { key: 'assignments', label: 'שיבוצים' },
+  { key: 'shampaf', label: 'שמ"פ' },
+  { key: 'equipment', label: 'ציוד' },
+  { key: 'platoons', label: 'מחלקות וכיתות' },
+  { key: 'statuses', label: 'סטטוסים' },
+  { key: 'activations', label: 'הפעלות' },
+];
+
 export function SettingsPage() {
-  const { theme, toggleTheme } = useAppStore();
+  const { theme, toggleTheme, offlineCategories, toggleOfflineCategory } = useAppStore();
   const platoons = usePlatoons();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -97,8 +109,17 @@ export function SettingsPage() {
   };
 
   const handleClearData = async () => {
-    const { db } = await import('@/db/database');
-    await db.delete();
+    const { collection, getDocs, writeBatch } = await import('firebase/firestore');
+    const { db } = await import('@/firebase');
+    const collections = ['soldiers', 'equipmentTypes', 'equipmentAssignments', 'statusEntries', 'tanks', 'tankCrewAssignments', 'platoons', 'squads', 'shampafEntries', 'shampafVacations', 'assignments', 'activations'];
+    for (const name of collections) {
+      const snap = await getDocs(collection(db, name));
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+    }
     setShowClearConfirm(false);
     window.location.reload();
   };
@@ -158,6 +179,34 @@ export function SettingsPage() {
           ) : (
             <p className="text-muted-foreground text-sm">אין מחלקות מוגדרות</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Offline cache settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <HardDrive className="h-5 w-5" />
+            נתונים לשמירה מקומית
+          </CardTitle>
+          <CardDescription>
+            בחר אילו נתונים יישמרו במכשיר לצפייה ללא חיבור לאינטרנט.
+            כשקטגוריה כבויה, הנתונים לא יטענו ולא יהיו זמינים במצב לא מקוון.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {CACHE_CATEGORIES.map(({ key, label }) => (
+              <div key={key} className="flex items-center justify-between">
+                <Label htmlFor={`cache-${key}`} className="cursor-pointer">{label}</Label>
+                <Switch
+                  id={`cache-${key}`}
+                  checked={offlineCategories[key]}
+                  onCheckedChange={() => toggleOfflineCategory(key)}
+                />
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

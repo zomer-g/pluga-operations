@@ -1,59 +1,110 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/database';
+import { useState, useEffect } from 'react';
+import { collection, query, onSnapshot, doc, deleteDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
+import { db } from '@/firebase';
 import type { StatusEntry, SoldierStatus } from '@/db/schema';
 import { generateId } from '@/lib/utils';
 import type { StatusEntryFormData } from '@/lib/validators';
+import { useCacheEnabled } from '@/stores/useAppStore';
 
 export function useStatusHistory(soldierId?: string) {
-  return useLiveQuery(async () => {
-    if (!soldierId) return [];
-    return db.statusEntries
-      .where('soldierId')
-      .equals(soldierId)
-      .reverse()
-      .sortBy('startDate');
-  }, [soldierId]);
+  const [entries, setEntries] = useState<StatusEntry[] | undefined>();
+  const enabled = useCacheEnabled('statuses');
+
+  useEffect(() => {
+    if (!enabled) { setEntries(undefined); return; }
+    if (!soldierId) {
+      setEntries([]);
+      return;
+    }
+    const q = query(collection(db, 'statusEntries'), where('soldierId', '==', soldierId));
+    const unsub = onSnapshot(q, (snap) => {
+      const result = snap.docs.map(d => ({ ...d.data(), id: d.id } as StatusEntry));
+      result.sort((a, b) => b.startDate.localeCompare(a.startDate));
+      setEntries(result);
+    });
+    return unsub;
+  }, [enabled, soldierId]);
+
+  return entries;
 }
 
 export function useCurrentStatus(soldierId?: string) {
-  return useLiveQuery(async () => {
-    if (!soldierId) return undefined;
-    const entries = await db.statusEntries
-      .where('soldierId')
-      .equals(soldierId)
-      .toArray();
-    return entries.find((e) => !e.endDate);
-  }, [soldierId]);
+  const [status, setStatus] = useState<StatusEntry | undefined>();
+  const enabled = useCacheEnabled('statuses');
+
+  useEffect(() => {
+    if (!enabled || !soldierId) {
+      setStatus(undefined);
+      return;
+    }
+    const q = query(collection(db, 'statusEntries'), where('soldierId', '==', soldierId));
+    const unsub = onSnapshot(q, (snap) => {
+      const entries = snap.docs.map(d => ({ ...d.data(), id: d.id } as StatusEntry));
+      setStatus(entries.find(e => !e.endDate));
+    });
+    return unsub;
+  }, [enabled, soldierId]);
+
+  return status;
 }
 
 export function useAllCurrentStatuses() {
-  return useLiveQuery(async () => {
-    const all = await db.statusEntries.toArray();
-    const currentMap = new Map<string, StatusEntry>();
-    for (const entry of all) {
-      if (!entry.endDate) {
-        currentMap.set(entry.soldierId, entry);
+  const [statusMap, setStatusMap] = useState<Map<string, StatusEntry> | undefined>();
+  const enabled = useCacheEnabled('statuses');
+
+  useEffect(() => {
+    if (!enabled) { setStatusMap(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
+      const currentMap = new Map<string, StatusEntry>();
+      for (const d of snap.docs) {
+        const entry = { ...d.data(), id: d.id } as StatusEntry;
+        if (!entry.endDate) {
+          currentMap.set(entry.soldierId, entry);
+        }
       }
-    }
-    return currentMap;
-  });
+      setStatusMap(currentMap);
+    });
+    return unsub;
+  }, [enabled]);
+
+  return statusMap;
 }
 
 export function useStatusCounts() {
-  return useLiveQuery(async () => {
-    const all = await db.statusEntries.toArray();
-    const counts: Record<string, number> = {};
-    for (const entry of all) {
-      if (!entry.endDate) {
-        counts[entry.status] = (counts[entry.status] ?? 0) + 1;
+  const [counts, setCounts] = useState<Record<string, number> | undefined>();
+  const enabled = useCacheEnabled('statuses');
+
+  useEffect(() => {
+    if (!enabled) { setCounts(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
+      const result: Record<string, number> = {};
+      for (const d of snap.docs) {
+        const entry = d.data() as StatusEntry;
+        if (!entry.endDate) {
+          result[entry.status] = (result[entry.status] ?? 0) + 1;
+        }
       }
-    }
-    return counts;
-  });
+      setCounts(result);
+    });
+    return unsub;
+  }, [enabled]);
+
+  return counts;
 }
 
 export function useAllStatusEntries() {
-  return useLiveQuery(() => db.statusEntries.toArray());
+  const [entries, setEntries] = useState<StatusEntry[] | undefined>();
+  const enabled = useCacheEnabled('statuses');
+
+  useEffect(() => {
+    if (!enabled) { setEntries(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
+      setEntries(snap.docs.map(d => ({ ...d.data(), id: d.id } as StatusEntry)));
+    });
+    return unsub;
+  }, [enabled]);
+
+  return entries;
 }
 
 export async function addStatusEntry(
@@ -61,36 +112,42 @@ export async function addStatusEntry(
   data: StatusEntryFormData
 ): Promise<string> {
   const id = generateId();
-  // Close previous open status
-  const openEntries = await db.statusEntries
-    .where('soldierId')
-    .equals(soldierId)
-    .filter((e) => !e.endDate)
-    .toArray();
 
-  await db.transaction('rw', db.statusEntries, async () => {
-    for (const entry of openEntries) {
-      await db.statusEntries.update(entry.id, { endDate: data.startDate });
-    }
-    const statusEntry: StatusEntry = {
-      id,
-      soldierId,
-      status: data.status as SoldierStatus,
-      startDate: data.startDate,
-      endDate: data.endDate || undefined,
-      notes: data.notes || undefined,
-      orderNumber: data.orderNumber || undefined,
-    };
-    await db.statusEntries.add(statusEntry);
-  });
+  // Find open entries to close
+  const openSnap = await getDocs(
+    query(collection(db, 'statusEntries'), where('soldierId', '==', soldierId))
+  );
+  const openEntries = openSnap.docs
+    .map(d => ({ ...d.data(), id: d.id } as StatusEntry))
+    .filter(e => !e.endDate);
 
+  const batch = writeBatch(db);
+
+  // Close previous open statuses
+  for (const entry of openEntries) {
+    batch.update(doc(db, 'statusEntries', entry.id), { endDate: data.startDate });
+  }
+
+  // Add new status entry
+  const statusEntry: StatusEntry = {
+    id,
+    soldierId,
+    status: data.status as SoldierStatus,
+    startDate: data.startDate,
+    endDate: data.endDate || undefined,
+    notes: data.notes || undefined,
+    orderNumber: data.orderNumber || undefined,
+  };
+  batch.set(doc(db, 'statusEntries', id), statusEntry);
+
+  await batch.commit();
   return id;
 }
 
 export async function updateStatusEntry(id: string, data: Partial<StatusEntry>): Promise<void> {
-  await db.statusEntries.update(id, data);
+  await updateDoc(doc(db, 'statusEntries', id), data);
 }
 
 export async function deleteStatusEntry(id: string): Promise<void> {
-  await db.statusEntries.delete(id);
+  await deleteDoc(doc(db, 'statusEntries', id));
 }

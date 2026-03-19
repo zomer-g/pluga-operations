@@ -1,34 +1,28 @@
-import { db } from './database';
+import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
+import { db } from '@/firebase';
+
+const COLLECTIONS = [
+  'soldiers', 'equipmentTypes', 'equipmentAssignments', 'statusEntries',
+  'tanks', 'tankCrewAssignments', 'platoons', 'squads',
+  'shampafEntries', 'shampafVacations', 'assignments', 'activations',
+];
 
 interface BackupData {
   version: number;
   exportDate: string;
-  tables: {
-    soldiers: unknown[];
-    equipmentTypes: unknown[];
-    equipmentAssignments: unknown[];
-    statusEntries: unknown[];
-    tanks: unknown[];
-    tankCrewAssignments: unknown[];
-    platoons: unknown[];
-    squads: unknown[];
-  };
+  tables: Record<string, unknown[]>;
 }
 
 export async function exportData(): Promise<string> {
+  const tables: Record<string, unknown[]> = {};
+  for (const name of COLLECTIONS) {
+    const snap = await getDocs(collection(db, name));
+    tables[name] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+  }
   const backup: BackupData = {
-    version: 1,
+    version: 3,
     exportDate: new Date().toISOString(),
-    tables: {
-      soldiers: await db.soldiers.toArray(),
-      equipmentTypes: await db.equipmentTypes.toArray(),
-      equipmentAssignments: await db.equipmentAssignments.toArray(),
-      statusEntries: await db.statusEntries.toArray(),
-      tanks: await db.tanks.toArray(),
-      tankCrewAssignments: await db.tankCrewAssignments.toArray(),
-      platoons: await db.platoons.toArray(),
-      squads: await db.squads.toArray(),
-    },
+    tables,
   };
   return JSON.stringify(backup, null, 2);
 }
@@ -36,31 +30,36 @@ export async function exportData(): Promise<string> {
 export async function importData(jsonString: string): Promise<{ success: boolean; message: string }> {
   try {
     const backup = JSON.parse(jsonString) as BackupData;
-
     if (!backup.version || !backup.tables) {
       return { success: false, message: 'קובץ גיבוי לא תקין' };
     }
 
-    await db.transaction('rw', [db.soldiers, db.equipmentTypes, db.equipmentAssignments, db.statusEntries, db.tanks, db.tankCrewAssignments, db.platoons, db.squads], async () => {
-        await db.soldiers.clear();
-        await db.equipmentTypes.clear();
-        await db.equipmentAssignments.clear();
-        await db.statusEntries.clear();
-        await db.tanks.clear();
-        await db.tankCrewAssignments.clear();
-        await db.platoons.clear();
-        await db.squads.clear();
+    for (const name of COLLECTIONS) {
+      const data = backup.tables[name];
+      if (!data || !Array.isArray(data)) continue;
 
-        if (backup.tables.soldiers.length) await db.soldiers.bulkAdd(backup.tables.soldiers as never[]);
-        if (backup.tables.equipmentTypes.length) await db.equipmentTypes.bulkAdd(backup.tables.equipmentTypes as never[]);
-        if (backup.tables.equipmentAssignments.length) await db.equipmentAssignments.bulkAdd(backup.tables.equipmentAssignments as never[]);
-        if (backup.tables.statusEntries.length) await db.statusEntries.bulkAdd(backup.tables.statusEntries as never[]);
-        if (backup.tables.tanks.length) await db.tanks.bulkAdd(backup.tables.tanks as never[]);
-        if (backup.tables.tankCrewAssignments.length) await db.tankCrewAssignments.bulkAdd(backup.tables.tankCrewAssignments as never[]);
-        if (backup.tables.platoons.length) await db.platoons.bulkAdd(backup.tables.platoons as never[]);
-        if (backup.tables.squads.length) await db.squads.bulkAdd(backup.tables.squads as never[]);
+      // Clear existing
+      const existing = await getDocs(collection(db, name));
+      if (!existing.empty) {
+        const batch = writeBatch(db);
+        existing.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
       }
-    );
+
+      // Write new data in batches of 500 (Firestore limit)
+      for (let i = 0; i < data.length; i += 500) {
+        const batch = writeBatch(db);
+        const chunk = data.slice(i, i + 500);
+        for (const item of chunk) {
+          const record = item as Record<string, unknown>;
+          const id = record['id'] as string;
+          if (id) {
+            batch.set(doc(db, name, id), record);
+          }
+        }
+        await batch.commit();
+      }
+    }
 
     return { success: true, message: 'הנתונים יובאו בהצלחה' };
   } catch {

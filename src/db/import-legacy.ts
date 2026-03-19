@@ -1,13 +1,8 @@
-/**
- * Legacy data import script.
- * Run once from the browser console or a temporary page to import old system data.
- * Maps old CSV data to the current app schema.
- */
-import { db } from './database';
+import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
+import { db } from '@/firebase';
 import type { Soldier, Tank, Platoon, Assignment, ShampafEntry, CrewRole, AssignmentType } from './schema';
 import { generateId } from '@/lib/utils';
 
-// ===== Role mapping =====
 const ROLE_MAP: Record<string, CrewRole | undefined> = {
   'מפקד': 'commander',
   'תותחן': 'gunner',
@@ -16,52 +11,9 @@ const ROLE_MAP: Record<string, CrewRole | undefined> = {
   'אחר': undefined,
 };
 
-// ===== Parsed CSV types =====
-interface OldSoldier {
-  name: string;
-  personalId: string;
-  role: string;
-  notes: string;
-  phone: string;
-  id: string;
-}
-
-interface OldDepartment {
-  name: string;
-  order: string;
-  id: string;
-}
-
-interface OldTank {
-  name: string;
-  vehicle_type: string;
-  department_id: string;
-  order: string;
-  id: string;
-}
-
-interface OldStatus {
-  end_date: string;
-  soldier_id: string;
-  start_date: string;
-  status: string;
-  id: string;
-}
-
-interface OldAssignment {
-  end_date: string;
-  soldier_id: string;
-  end_half: string;
-  start_half: string;
-  tank_id: string;
-  position: string;
-  start_date: string;
-  id: string;
-}
-
-// ===== CSV Parser =====
 function parseCSV(csv: string): Record<string, string>[] {
   const lines = csv.trim().split('\n');
+  if (lines.length === 0) return [];
   const headers = parseCSVLine(lines[0]!);
   return lines.slice(1).map(line => {
     const values = parseCSVLine(line);
@@ -78,24 +30,15 @@ function parseCSVLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i]!;
     if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += ch;
-    }
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
+    else current += ch;
   }
   result.push(current);
   return result;
 }
 
-// ===== Split Hebrew name into first/last =====
 function splitName(fullName: string): { firstName: string; lastName: string } {
   const parts = fullName.trim().split(/\s+/);
   if (parts.length === 1) return { firstName: parts[0]!, lastName: '' };
@@ -103,7 +46,6 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
   return { firstName: parts.join(' '), lastName };
 }
 
-// ===== Main import function =====
 export async function importLegacyData(csvData: {
   soldiers: string;
   departments: string;
@@ -111,138 +53,111 @@ export async function importLegacyData(csvData: {
   statuses: string;
   assignments: string;
 }): Promise<{ message: string; counts: Record<string, number> }> {
-  const oldSoldiers = parseCSV(csvData.soldiers) as unknown as OldSoldier[];
-  const oldDepts = parseCSV(csvData.departments) as unknown as OldDepartment[];
-  const oldTanks = parseCSV(csvData.tanks) as unknown as OldTank[];
-  const oldStatuses = parseCSV(csvData.statuses) as unknown as OldStatus[];
-  const oldAssignments = parseCSV(csvData.assignments) as unknown as OldAssignment[];
+  const oldSoldiers = parseCSV(csvData.soldiers);
+  const oldDepts = csvData.departments ? parseCSV(csvData.departments) : [];
+  const oldTanks = csvData.tanks ? parseCSV(csvData.tanks) : [];
+  const oldStatuses = csvData.statuses ? parseCSV(csvData.statuses) : [];
+  const oldAssignments = csvData.assignments ? parseCSV(csvData.assignments) : [];
 
-  // ID maps: old ID -> new ID
   const soldierIdMap = new Map<string, string>();
   const deptIdMap = new Map<string, string>();
   const tankIdMap = new Map<string, string>();
-
   const now = new Date().toISOString();
 
-  // ===== 1. Import Departments as Platoons =====
+  // Build data
   const platoons: Platoon[] = oldDepts.map((d, i) => {
     const id = generateId();
-    deptIdMap.set(d.id, id);
-    return {
-      id,
-      name: d.name,
-      number: parseInt(d.order) || (i + 1),
-    };
+    deptIdMap.set(d['id'] ?? '', id);
+    return { id, name: d['name'] ?? '', number: parseInt(d['order'] ?? '') || (i + 1) };
   });
 
-  // ===== 2. Import Soldiers =====
   const soldiers: Soldier[] = oldSoldiers.map(s => {
     const id = generateId();
-    soldierIdMap.set(s.id, id);
-    const { firstName, lastName } = splitName(s.name);
-    const trainedRole = ROLE_MAP[s.role];
+    soldierIdMap.set(s['id'] ?? '', id);
+    const { firstName, lastName } = splitName(s['name'] ?? '');
     return {
-      id,
-      firstName,
-      lastName,
-      militaryId: s.personalId,
-      trainedRole: trainedRole,
-      phoneNumber: s.phone || undefined,
-      notes: s.notes || undefined,
-      createdAt: now,
-      updatedAt: now,
+      id, firstName, lastName,
+      militaryId: s['personalId'],
+      trainedRole: ROLE_MAP[s['role'] ?? ''],
+      createdAt: now, updatedAt: now,
     } as Soldier;
   });
 
-  // ===== 3. Import Tanks =====
   const tanks: Tank[] = oldTanks.map(t => {
     const id = generateId();
-    tankIdMap.set(t.id, id);
-    const isVehicle = t.vehicle_type === 'רכב';
+    tankIdMap.set(t['id'] ?? '', id);
     return {
       id,
-      designation: t.name,
-      type: isVehicle ? 'רכב' : 'מרכבה סימן 4',
-      platoonId: deptIdMap.get(t.department_id),
+      designation: t['name'] ?? '',
+      type: t['vehicle_type'] === 'רכב' ? 'רכב' : 'מרכבה סימן 4',
+      platoonId: deptIdMap.get(t['department_id'] ?? ''),
       status: 'operational' as const,
     };
   });
 
-  // ===== 4. Import Statuses as ShampafEntries =====
-  const shampafEntries: ShampafEntry[] = oldStatuses
-    .filter(s => s.status === 'פעיל')
-    .map(s => {
-      return {
-        id: generateId(),
-        soldierId: soldierIdMap.get(s.soldier_id) ?? s.soldier_id,
-        startDateTime: s.start_date + 'T08:00',
-        endDateTime: s.end_date + 'T18:00',
-      };
-    })
-    // Deduplicate: keep only one entry per soldier (the one with the latest end date)
-    .reduce((acc, entry) => {
-      const existing = acc.find(e => e.soldierId === entry.soldierId);
-      if (!existing) {
-        acc.push(entry);
-      } else if (entry.endDateTime > existing.endDateTime) {
-        Object.assign(existing, entry);
-      } else if (entry.startDateTime < existing.startDateTime) {
-        existing.startDateTime = entry.startDateTime;
-      }
-      return acc;
-    }, [] as ShampafEntry[]);
-
-  // ===== 5. Import Assignments =====
-  // Position mapping for tank roles
   const positionToRole: Record<string, CrewRole | undefined> = {
-    'מפקד': 'commander',
-    'תותחן': 'gunner',
-    'נהג': 'driver',
-    'טען': 'loader',
+    'מפקד': 'commander', 'תותחן': 'gunner', 'נהג': 'driver', 'טען': 'loader',
   };
 
+  // Deduplicate shampaf per soldier
+  const shampafMap = new Map<string, ShampafEntry>();
+  for (const s of oldStatuses) {
+    if (s['status'] !== 'פעיל') continue;
+    const newSoldierId = soldierIdMap.get(s['soldier_id'] ?? '') ?? s['soldier_id'] ?? '';
+    const startDT = (s['start_date'] ?? '') + 'T08:00';
+    const endDT = (s['end_date'] ?? '') + 'T18:00';
+    const existing = shampafMap.get(newSoldierId);
+    if (!existing) {
+      shampafMap.set(newSoldierId, { id: generateId(), soldierId: newSoldierId, startDateTime: startDT, endDateTime: endDT });
+    } else {
+      if (startDT < existing.startDateTime) existing.startDateTime = startDT;
+      if (endDT > existing.endDateTime) existing.endDateTime = endDT;
+    }
+  }
+  const shampafEntries = [...shampafMap.values()];
+
   const assignments: Assignment[] = oldAssignments.map(a => {
-    const newSoldierId = soldierIdMap.get(a.soldier_id) ?? a.soldier_id;
-    const newTankId = tankIdMap.get(a.tank_id) ?? a.tank_id;
-    const role = positionToRole[a.position];
-
-    // Determine if this is a tank role or a general mission (numbered positions like "מקום 1")
+    const newSoldierId = soldierIdMap.get(a['soldier_id'] ?? '') ?? a['soldier_id'] ?? '';
+    const newTankId = tankIdMap.get(a['tank_id'] ?? '') ?? a['tank_id'] ?? '';
+    const role = positionToRole[a['position'] ?? ''];
     const isTankRole = !!role;
-
-    const startHour = a.start_half === 'full' ? '08:00' : (a.start_half === 'morning' ? '08:00' : '12:00');
-    const endHour = a.end_half === 'morning' ? '12:00' : '18:00';
-
+    const startHour = a['start_half'] === 'evening' ? '12:00' : '08:00';
     return {
       id: generateId(),
       soldierId: newSoldierId,
       type: (isTankRole ? 'tank_role' : 'general_mission') as AssignmentType,
       tankId: newTankId,
-      role: role,
-      missionName: isTankRole ? undefined : a.position,
-      startDateTime: a.start_date + 'T' + startHour,
-      endDateTime: a.end_date + 'T' + endHour,
+      role, missionName: isTankRole ? undefined : a['position'],
+      startDateTime: (a['start_date'] ?? '') + 'T' + startHour,
+      endDateTime: (a['end_date'] ?? '') + 'T18:00',
     };
   });
 
-  // ===== Write to database =====
-  await db.transaction('rw', [
-    db.soldiers, db.platoons, db.tanks,
-    db.shampafEntries, db.assignments,
-  ], async () => {
-    // Clear existing data
-    await db.soldiers.clear();
-    await db.platoons.clear();
-    await db.tanks.clear();
-    await db.shampafEntries.clear();
-    await db.assignments.clear();
+  // Write to Firestore in batches
+  const writeBatchData = async (collectionName: string, items: Record<string, unknown>[]) => {
+    // Clear existing
+    const existing = await getDocs(collection(db, collectionName));
+    if (!existing.empty) {
+      const batch = writeBatch(db);
+      existing.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    // Write in chunks of 500
+    for (let i = 0; i < items.length; i += 500) {
+      const batch = writeBatch(db);
+      for (const item of items.slice(i, i + 500)) {
+        const id = item['id'] as string;
+        batch.set(doc(db, collectionName, id), item);
+      }
+      await batch.commit();
+    }
+  };
 
-    // Bulk insert
-    await db.platoons.bulkAdd(platoons);
-    await db.soldiers.bulkAdd(soldiers);
-    await db.tanks.bulkAdd(tanks);
-    await db.shampafEntries.bulkAdd(shampafEntries);
-    await db.assignments.bulkAdd(assignments);
-  });
+  await writeBatchData('platoons', platoons as unknown as Record<string, unknown>[]);
+  await writeBatchData('soldiers', soldiers as unknown as Record<string, unknown>[]);
+  await writeBatchData('tanks', tanks as unknown as Record<string, unknown>[]);
+  await writeBatchData('shampafEntries', shampafEntries as unknown as Record<string, unknown>[]);
+  await writeBatchData('assignments', assignments as unknown as Record<string, unknown>[]);
 
   return {
     message: 'ייבוא הושלם בהצלחה',

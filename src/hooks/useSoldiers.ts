@@ -1,8 +1,10 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/database';
+import { useState, useEffect } from 'react';
+import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
+import { db } from '@/firebase';
 import type { Soldier, SoldierRank } from '@/db/schema';
 import { generateId } from '@/lib/utils';
 import type { SoldierFormData } from '@/lib/validators';
+import { useCacheEnabled } from '@/stores/useAppStore';
 
 interface SoldierFilters {
   search?: string;
@@ -12,51 +14,90 @@ interface SoldierFilters {
 }
 
 export function useSoldiers(filters?: SoldierFilters) {
-  return useLiveQuery(async () => {
-    let soldiers = await db.soldiers.orderBy('lastName').toArray();
+  const [soldiers, setSoldiers] = useState<Soldier[] | undefined>();
+  const enabled = useCacheEnabled('soldiers');
 
-    if (filters?.search) {
-      const q = filters.search.toLowerCase();
-      soldiers = soldiers.filter(
-        (s) =>
-          s.firstName.toLowerCase().includes(q) ||
-          s.lastName.toLowerCase().includes(q) ||
-          (s.militaryId || '').includes(q) ||
-          (s.phoneNumber || '').includes(q)
-      );
-    }
+  useEffect(() => {
+    if (!enabled) { setSoldiers(undefined); return; }
+    const q = query(collection(db, 'soldiers'), orderBy('lastName'));
+    const unsub = onSnapshot(q, async (snap) => {
+      let result = snap.docs.map(d => ({ ...d.data(), id: d.id } as Soldier));
 
-    if (filters?.rank) {
-      soldiers = soldiers.filter((s) => s.rank === filters.rank);
-    }
+      if (filters?.search) {
+        const searchQ = filters.search.toLowerCase();
+        result = result.filter(
+          (s) =>
+            s.firstName.toLowerCase().includes(searchQ) ||
+            s.lastName.toLowerCase().includes(searchQ) ||
+            (s.militaryId || '').includes(searchQ) ||
+            (s.phoneNumber || '').includes(searchQ)
+        );
+      }
 
-    if (filters?.platoonId) {
-      soldiers = soldiers.filter((s) => s.platoonId === filters.platoonId);
-    }
+      if (filters?.rank) {
+        result = result.filter((s) => s.rank === filters.rank);
+      }
 
-    if (filters?.status) {
-      const activeStatuses = await db.statusEntries
-        .where('status')
-        .equals(filters.status)
-        .filter((se) => !se.endDate)
-        .toArray();
-      const activeSoldierIds = new Set(activeStatuses.map((se) => se.soldierId));
-      soldiers = soldiers.filter((s) => activeSoldierIds.has(s.id));
-    }
+      if (filters?.platoonId) {
+        result = result.filter((s) => s.platoonId === filters.platoonId);
+      }
 
-    return soldiers;
-  }, [filters?.search, filters?.rank, filters?.platoonId, filters?.status]);
+      if (filters?.status) {
+        const statusSnap = await getDocs(
+          query(collection(db, 'statusEntries'), where('status', '==', filters.status))
+        );
+        const activeSoldierIds = new Set(
+          statusSnap.docs
+            .map(d => d.data() as { soldierId: string; endDate?: string })
+            .filter(se => !se.endDate)
+            .map(se => se.soldierId)
+        );
+        result = result.filter((s) => activeSoldierIds.has(s.id));
+      }
+
+      setSoldiers(result);
+    });
+    return unsub;
+  }, [enabled, filters?.search, filters?.rank, filters?.platoonId, filters?.status]);
+
+  return soldiers;
 }
 
 export function useSoldier(id: string | undefined) {
-  return useLiveQuery(
-    () => (id ? db.soldiers.get(id) : undefined),
-    [id]
-  );
+  const [soldier, setSoldier] = useState<Soldier | undefined>();
+  const enabled = useCacheEnabled('soldiers');
+
+  useEffect(() => {
+    if (!enabled || !id) {
+      setSoldier(undefined);
+      return;
+    }
+    const unsub = onSnapshot(doc(db, 'soldiers', id), (snap) => {
+      if (snap.exists()) {
+        setSoldier({ ...snap.data(), id: snap.id } as Soldier);
+      } else {
+        setSoldier(undefined);
+      }
+    });
+    return unsub;
+  }, [enabled, id]);
+
+  return soldier;
 }
 
 export function useSoldierCount() {
-  return useLiveQuery(() => db.soldiers.count());
+  const [count, setCount] = useState<number | undefined>();
+  const enabled = useCacheEnabled('soldiers');
+
+  useEffect(() => {
+    if (!enabled) { setCount(undefined); return; }
+    const unsub = onSnapshot(collection(db, 'soldiers'), (snap) => {
+      setCount(snap.size);
+    });
+    return unsub;
+  }, [enabled]);
+
+  return count;
 }
 
 export async function addSoldier(data: SoldierFormData): Promise<string> {
@@ -74,19 +115,31 @@ export async function addSoldier(data: SoldierFormData): Promise<string> {
     createdAt: now,
     updatedAt: now,
   };
-  await db.soldiers.add(soldier);
+  await setDoc(doc(db, 'soldiers', id), soldier);
   return id;
 }
 
 export async function updateSoldier(id: string, data: SoldierFormData): Promise<void> {
-  await db.soldiers.update(id, { ...data, email: data.email || undefined, updatedAt: new Date().toISOString() } as Partial<Soldier>);
+  await updateDoc(doc(db, 'soldiers', id), { ...data, email: data.email || undefined, updatedAt: new Date().toISOString() });
 }
 
 export async function deleteSoldier(id: string): Promise<void> {
-  await db.transaction('rw', db.soldiers, db.equipmentAssignments, db.statusEntries, db.tankCrewAssignments, async () => {
-    await db.soldiers.delete(id);
-    await db.equipmentAssignments.where('soldierId').equals(id).delete();
-    await db.statusEntries.where('soldierId').equals(id).delete();
-    await db.tankCrewAssignments.where('soldierId').equals(id).delete();
-  });
+  const batch = writeBatch(db);
+
+  // Delete soldier
+  batch.delete(doc(db, 'soldiers', id));
+
+  // Cascade: delete equipment assignments
+  const eqSnap = await getDocs(query(collection(db, 'equipmentAssignments'), where('soldierId', '==', id)));
+  eqSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // Cascade: delete status entries
+  const seSnap = await getDocs(query(collection(db, 'statusEntries'), where('soldierId', '==', id)));
+  seSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // Cascade: delete tank crew assignments
+  const tcSnap = await getDocs(query(collection(db, 'tankCrewAssignments'), where('soldierId', '==', id)));
+  tcSnap.docs.forEach(d => batch.delete(d.ref));
+
+  await batch.commit();
 }
