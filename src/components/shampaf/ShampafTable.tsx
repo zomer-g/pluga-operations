@@ -159,25 +159,25 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm table-fixed min-w-[640px]">
+        <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
           <colgroup>
-            <col className="w-10" />
-            <col />
-            <col className="w-28" />
-            <col className="w-28" />
-            <col className="w-24" />
-            <col className="w-14" />
-            <col className="w-20" />
+            <col style={{ width: '40px' }} />
+            <col style={{ width: '25%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '80px' }} />
           </colgroup>
           <thead className="sticky top-0 z-10">
             <tr className="bg-card border-b">
               <th className="py-3 px-2"></th>
-              <th className="text-right py-3 px-3 font-medium">חייל</th>
-              <th className="text-right py-3 px-3 font-medium">התחלה</th>
-              <th className="text-right py-3 px-3 font-medium">סיום</th>
-              <th className="text-right py-3 px-3 font-medium">מס' פקודה</th>
-              <th className="text-center py-3 px-2 font-medium">חופשות</th>
-              <th className="text-center py-3 px-2 font-medium">פעולות</th>
+              <th className="text-right py-3 px-3 font-medium text-foreground">חייל</th>
+              <th className="text-right py-3 px-3 font-medium text-foreground">התחלה</th>
+              <th className="text-right py-3 px-3 font-medium text-foreground">סיום</th>
+              <th className="text-right py-3 px-3 font-medium text-foreground">מס' פקודה</th>
+              <th className="text-center py-3 px-2 font-medium text-foreground">חופשות</th>
+              <th className="text-center py-3 px-2 font-medium text-foreground">פעולות</th>
             </tr>
           </thead>
           <tbody>
@@ -225,8 +225,8 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
                         {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
                       </button>
                     </td>
-                    <td className="py-2 px-3 font-medium truncate">
-                      {getSoldierName(entry.soldierId, soldiers)}
+                    <td className="py-2 px-3 font-medium">
+                      <span className="block truncate">{getSoldierName(entry.soldierId, soldiers)}</span>
                     </td>
                     <td className="py-2 px-3">
                       {isEditing ? (
