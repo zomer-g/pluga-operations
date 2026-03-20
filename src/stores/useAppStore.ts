@@ -11,11 +11,6 @@ export type CacheCategory =
   | 'statuses'
   | 'activations';
 
-const ALL_CATEGORIES: CacheCategory[] = [
-  'soldiers', 'tanks', 'assignments', 'shampaf',
-  'equipment', 'platoons', 'statuses', 'activations',
-];
-
 interface AppState {
   theme: 'dark' | 'light';
   sidebarOpen: boolean;
