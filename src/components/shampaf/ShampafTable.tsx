@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import {
   Pencil, Trash2, ChevronDown, ChevronLeft,
   Plus, Check, X,
@@ -218,7 +218,7 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
               const entryVacs = vacations.filter((v) => v.shampafEntryId === entry.id);
 
               return (
-                <tbody key={entry.id}>
+                <Fragment key={entry.id}>
                   <tr className={cn('border-b hover:bg-card/50 transition-colors', isEditing && 'bg-primary/5')}>
                     <td className="py-2 px-2">
                       <button onClick={() => toggleExpand(entry.id)} className="p-1 rounded hover:bg-muted touch-target flex items-center justify-center">
@@ -356,21 +356,19 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
                       )}
                     </>
                   )}
-                </tbody>
+                </Fragment>
               );
             })}
-          </tbody>
 
-          {entries.length === 0 && !isNew && (
-            <tbody>
+            {entries.length === 0 && !isNew && (
               <tr>
                 <td colSpan={7} className="py-12 text-center text-muted-foreground">
                   <p>אין רשומות שמ"פ</p>
                   <p className="text-xs mt-1">לחץ "הוסף שמ"פ" להתחלה</p>
                 </td>
               </tr>
-            </tbody>
-          )}
+            )}
+          </tbody>
         </table>
       </div>
     </div>
