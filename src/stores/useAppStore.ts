@@ -30,9 +30,16 @@ export function useCacheEnabled(category: CacheCategory): boolean {
   return useAppStore(state => state.offlineCategories[category] ?? true);
 }
 
-const defaultOfflineCategories = Object.fromEntries(
-  ALL_CATEGORIES.map(c => [c, true])
-) as Record<CacheCategory, boolean>;
+const defaultOfflineCategories: Record<CacheCategory, boolean> = {
+  soldiers: true,
+  tanks: true,
+  assignments: true,
+  shampaf: false,
+  equipment: false,
+  platoons: true,
+  statuses: false,
+  activations: false,
+};
 
 export const useAppStore = create<AppState>()(
   persist(
