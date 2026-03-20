@@ -19,6 +19,9 @@ const CACHE_CATEGORIES: { key: CacheCategory; label: string }[] = [
   { key: 'platoons', label: 'מחלקות וכיתות' },
   { key: 'statuses', label: 'סטטוסים' },
   { key: 'activations', label: 'הפעלות' },
+  { key: 'routine', label: 'שגרה' },
+  { key: 'training', label: 'הדרכה' },
+  { key: 'donations', label: 'תרומות' },
 ];
 
 export function SettingsPage() {
@@ -111,7 +114,7 @@ export function SettingsPage() {
   const handleClearData = async () => {
     const { collection, getDocs, writeBatch } = await import('firebase/firestore');
     const { db } = await import('@/firebase');
-    const collections = ['soldiers', 'equipmentTypes', 'equipmentAssignments', 'statusEntries', 'tanks', 'tankCrewAssignments', 'platoons', 'squads', 'shampafEntries', 'shampafVacations', 'assignments', 'activations'];
+    const collections = ['soldiers', 'equipmentTypes', 'equipmentAssignments', 'statusEntries', 'tanks', 'tankCrewAssignments', 'platoons', 'squads', 'shampafEntries', 'shampafVacations', 'assignments', 'activations', 'routineTemplates', 'trainingContent', 'trainingTags', 'trainingCategories', 'donations', 'userPermissions', 'permissionGroups'];
     for (const name of collections) {
       const snap = await getDocs(collection(db, name));
       if (!snap.empty) {

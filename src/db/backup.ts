@@ -5,6 +5,8 @@ const COLLECTIONS = [
   'soldiers', 'equipmentTypes', 'equipmentAssignments', 'statusEntries',
   'tanks', 'tankCrewAssignments', 'platoons', 'squads',
   'shampafEntries', 'shampafVacations', 'assignments', 'activations',
+  'routineTemplates', 'trainingContent', 'trainingTags', 'trainingCategories',
+  'donations', 'userPermissions', 'permissionGroups',
 ];
 
 interface BackupData {

@@ -9,7 +9,10 @@ export type CacheCategory =
   | 'equipment'
   | 'platoons'
   | 'statuses'
-  | 'activations';
+  | 'activations'
+  | 'routine'
+  | 'training'
+  | 'donations';
 
 interface AppState {
   theme: 'dark' | 'light';
@@ -36,6 +39,9 @@ const defaultOfflineCategories: Record<CacheCategory, boolean> = {
   platoons: false,
   statuses: false,
   activations: false,
+  routine: false,
+  training: false,
+  donations: false,
 };
 
 export const useAppStore = create<AppState>()(
