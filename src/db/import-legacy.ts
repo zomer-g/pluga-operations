@@ -75,24 +75,28 @@ export async function importLegacyData(csvData: {
     const id = generateId();
     soldierIdMap.set(s['id'] ?? '', id);
     const { firstName, lastName } = splitName(s['name'] ?? '');
-    return {
+    const role = ROLE_MAP[s['role'] ?? ''];
+    const soldier: Record<string, unknown> = {
       id, firstName, lastName,
-      militaryId: s['personalId'],
-      trainedRole: ROLE_MAP[s['role'] ?? ''],
+      militaryId: s['personalId'] || '',
       createdAt: now, updatedAt: now,
-    } as Soldier;
+    };
+    if (role) soldier.trainedRole = role;
+    return soldier as unknown as Soldier;
   });
 
   const tanks: Tank[] = oldTanks.map(t => {
     const id = generateId();
     tankIdMap.set(t['id'] ?? '', id);
-    return {
+    const tank: Record<string, unknown> = {
       id,
       designation: t['name'] ?? '',
       type: t['vehicle_type'] === 'רכב' ? 'רכב' : 'מרכבה סימן 4',
-      platoonId: deptIdMap.get(t['department_id'] ?? ''),
-      status: 'operational' as const,
+      status: 'operational',
     };
+    const platoonId = deptIdMap.get(t['department_id'] ?? '');
+    if (platoonId) tank.platoonId = platoonId;
+    return tank as unknown as Tank;
   });
 
   const positionToRole: Record<string, CrewRole | undefined> = {
@@ -122,15 +126,17 @@ export async function importLegacyData(csvData: {
     const role = positionToRole[a['position'] ?? ''];
     const isTankRole = !!role;
     const startHour = a['start_half'] === 'evening' ? '12:00' : '08:00';
-    return {
+    const assignment: Record<string, unknown> = {
       id: generateId(),
       soldierId: newSoldierId,
-      type: (isTankRole ? 'tank_role' : 'general_mission') as AssignmentType,
+      type: isTankRole ? 'tank_role' : 'general_mission',
       tankId: newTankId,
-      role, missionName: isTankRole ? undefined : a['position'],
       startDateTime: (a['start_date'] ?? '') + 'T' + startHour,
       endDateTime: (a['end_date'] ?? '') + 'T18:00',
     };
+    if (role) assignment.role = role;
+    if (!isTankRole && a['position']) assignment.missionName = a['position'];
+    return assignment as unknown as Assignment;
   });
 
   // Write to Firestore in batches
