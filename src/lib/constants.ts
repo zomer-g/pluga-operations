@@ -7,6 +7,7 @@ import type {
   SoldierStatus,
   TankStatus,
   CrewRole,
+  VehicleCategory,
 } from '@/db/schema';
 
 export const RANKS: { value: SoldierRank; label: string }[] = [
@@ -70,6 +71,16 @@ export const CREW_ROLES: { value: CrewRole; label: string; position: string }[] 
   { value: 'loader', label: 'טען', position: 'back-left' },
   { value: 'commander', label: 'מפקד', position: 'back-right' },
 ];
+
+export const VEHICLE_CATEGORIES: { value: VehicleCategory; label: string }[] = [
+  { value: 'tank', label: 'טנק' },
+  { value: 'standard', label: 'רכב רגיל' },
+];
+
+export function getVehicleCategoryLabel(category?: VehicleCategory): string {
+  if (!category) return 'טנק';
+  return VEHICLE_CATEGORIES.find(c => c.value === category)?.label ?? category;
+}
 
 export const SHAMPAF_COLORS = {
   mobilized: 'bg-emerald-600',

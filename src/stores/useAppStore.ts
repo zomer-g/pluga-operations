@@ -15,10 +15,12 @@ interface AppState {
   theme: 'dark' | 'light';
   sidebarOpen: boolean;
   offlineCategories: Record<CacheCategory, boolean>;
+  selectedActivationId: string | null;
   toggleTheme: () => void;
   setSidebarOpen: (open: boolean) => void;
   toggleOfflineCategory: (category: CacheCategory) => void;
   isCategoryEnabled: (category: CacheCategory) => boolean;
+  setSelectedActivationId: (id: string | null) => void;
 }
 
 export function useCacheEnabled(category: CacheCategory): boolean {
@@ -31,7 +33,7 @@ const defaultOfflineCategories: Record<CacheCategory, boolean> = {
   assignments: true,
   shampaf: false,
   equipment: false,
-  platoons: true,
+  platoons: false,
   statuses: false,
   activations: false,
 };
@@ -42,6 +44,7 @@ export const useAppStore = create<AppState>()(
       theme: 'dark',
       sidebarOpen: false,
       offlineCategories: { ...defaultOfflineCategories },
+      selectedActivationId: null,
       toggleTheme: () =>
         set((state) => {
           const newTheme = state.theme === 'dark' ? 'light' : 'dark';
@@ -56,6 +59,7 @@ export const useAppStore = create<AppState>()(
             [category]: !state.offlineCategories[category],
           },
         })),
+      setSelectedActivationId: (id) => set({ selectedActivationId: id }),
       isCategoryEnabled: (category) => get().offlineCategories[category] ?? true,
     }),
     {
@@ -63,6 +67,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         theme: state.theme,
         offlineCategories: state.offlineCategories,
+        selectedActivationId: state.selectedActivationId,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.theme === 'light') {

@@ -43,8 +43,9 @@ export const statusEntrySchema = z.object({
 export type StatusEntryFormData = z.infer<typeof statusEntrySchema>;
 
 export const tankSchema = z.object({
-  designation: z.string().min(1, 'שם/מספר טנק נדרש'),
-  type: z.string().min(1, 'סוג טנק נדרש'),
+  designation: z.string().min(1, 'שם/מספר רכב נדרש'),
+  type: z.string().min(1, 'סוג רכב נדרש'),
+  vehicleCategory: z.enum(['tank', 'standard']).optional(),
   platoonId: z.string().optional(),
   status: z.string().min(1, 'סטטוס נדרש'),
   notes: z.string().optional(),

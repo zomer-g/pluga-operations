@@ -1,20 +1,42 @@
+import { useEffect, useMemo } from 'react';
 import { Moon, Sun, Settings, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/stores/useAppStore';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useActivations } from '@/hooks/useActivation';
+import { formatDate } from '@/lib/utils';
 
 export function Header() {
   const { theme, toggleTheme } = useAppStore();
+  const selectedActivationId = useAppStore(s => s.selectedActivationId);
+  const setSelectedActivationId = useAppStore(s => s.setSelectedActivationId);
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const activations = useActivations();
+
+  // Sort activations by endDate descending (latest first)
+  const sortedActivations = useMemo(() => {
+    if (!activations) return [];
+    return [...activations].sort((a, b) => b.endDate.localeCompare(a.endDate));
+  }, [activations]);
+
+  // Auto-select latest activation when none selected
+  useEffect(() => {
+    if (sortedActivations.length > 0 && !selectedActivationId) {
+      setSelectedActivationId(sortedActivations[0]!.id);
+    }
+  }, [sortedActivations, selectedActivationId, setSelectedActivationId]);
 
   return (
-    <header className="flex items-center justify-between border-b bg-card px-4 py-3">
+    <header className="flex items-center justify-between border-b bg-card px-4 py-3 gap-2">
+      {/* Left side: mobile title */}
       <div className="md:hidden">
         <h1 className="text-lg font-bold text-primary">ניהול פלוגה</h1>
       </div>
-      <div className="hidden md:flex items-center gap-2">
+
+      {/* Left side: user info (desktop) */}
+      <div className="hidden md:flex items-center gap-3">
         {user && user.email !== 'local' && (
           <div className="flex items-center gap-2">
             {user.picture && (
@@ -24,6 +46,25 @@ export function Header() {
           </div>
         )}
       </div>
+
+      {/* Center: Activation dropdown */}
+      {sortedActivations.length > 0 && (
+        <div className="flex items-center gap-2 flex-1 justify-center max-w-xs">
+          <select
+            value={selectedActivationId ?? ''}
+            onChange={(e) => setSelectedActivationId(e.target.value || null)}
+            className="h-8 rounded-md border bg-card text-sm px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring min-w-0 w-full max-w-[240px] text-foreground"
+          >
+            {sortedActivations.map((act) => (
+              <option key={act.id} value={act.id}>
+                {act.name} ({formatDate(act.startDate)} - {formatDate(act.endDate)})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Right side: actions */}
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"

@@ -159,16 +159,25 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm min-w-[600px]">
-          <thead>
+        <table className="w-full text-sm table-fixed min-w-[640px]">
+          <colgroup>
+            <col className="w-10" />
+            <col />
+            <col className="w-28" />
+            <col className="w-28" />
+            <col className="w-24" />
+            <col className="w-14" />
+            <col className="w-20" />
+          </colgroup>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-card border-b">
-              <th className="w-10 py-3 px-2"></th>
+              <th className="py-3 px-2"></th>
               <th className="text-right py-3 px-3 font-medium">חייל</th>
-              <th className="text-right py-3 px-3 font-medium w-28">התחלה</th>
-              <th className="text-right py-3 px-3 font-medium w-28">סיום</th>
-              <th className="text-right py-3 px-3 font-medium w-24">מס' פקודה</th>
-              <th className="text-center py-3 px-2 font-medium w-16">חופשות</th>
-              <th className="text-center py-3 px-2 font-medium w-20">פעולות</th>
+              <th className="text-right py-3 px-3 font-medium">התחלה</th>
+              <th className="text-right py-3 px-3 font-medium">סיום</th>
+              <th className="text-right py-3 px-3 font-medium">מס' פקודה</th>
+              <th className="text-center py-3 px-2 font-medium">חופשות</th>
+              <th className="text-center py-3 px-2 font-medium">פעולות</th>
             </tr>
           </thead>
           <tbody>
@@ -216,7 +225,7 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
                         {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
                       </button>
                     </td>
-                    <td className="py-2 px-3 font-medium">
+                    <td className="py-2 px-3 font-medium truncate">
                       {getSoldierName(entry.soldierId, soldiers)}
                     </td>
                     <td className="py-2 px-3">

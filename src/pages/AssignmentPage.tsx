@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CalendarClock, Plus } from 'lucide-react';
+import { CalendarClock, Plus, Truck } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,27 +23,53 @@ import {
   addAssignment,
 } from '@/hooks/useAssignment';
 import { useSoldiers } from '@/hooks/useSoldiers';
-import { useTanks } from '@/hooks/useTanks';
-import { ASSIGNMENT_COLORS, getCrewRoleLabel } from '@/lib/constants';
-import { noonToday, noonTomorrow } from '@/lib/utils';
-import type { CrewRole } from '@/db/schema';
+import { useTanks, addTank } from '@/hooks/useTanks';
+import { useActivations } from '@/hooks/useActivation';
+import { useAppStore } from '@/stores/useAppStore';
+import { ASSIGNMENT_COLORS, getCrewRoleLabel, VEHICLE_CATEGORIES } from '@/lib/constants';
+import { noonToday, noonTomorrow, dateRangesOverlap } from '@/lib/utils';
+import type { CrewRole, VehicleCategory } from '@/db/schema';
 
 export function AssignmentPage() {
-  const assignments = useAssignments();
+  const allAssignments = useAssignments();
   const soldiers = useSoldiers();
   const tanks = useTanks();
   const conflicts = useAssignmentConflicts();
+  const activations = useActivations();
+
+  // Global activation from store
+  const selectedActivationId = useAppStore(s => s.selectedActivationId);
+  const activeActivation = activations?.find(a => a.id === selectedActivationId) ?? null;
+
+  // Filter assignments by activation date range
+  const assignments = useMemo(() => {
+    if (!allAssignments) return undefined;
+    if (!activeActivation) return allAssignments;
+    return allAssignments.filter(a =>
+      dateRangesOverlap(
+        a.startDateTime.split('T')[0]!,
+        a.endDateTime.split('T')[0]!,
+        activeActivation.startDate,
+        activeActivation.endDate
+      )
+    );
+  }, [allAssignments, activeActivation]);
+
   // Date filter for tank view
   const [viewDateTime, setViewDateTime] = useState(noonToday());
 
-  // Default Gantt date range: -7 days to +30 days
+  // Default Gantt date range from activation or default +-30 days
   const today = new Date();
-  const defaultStart = new Date(today);
-  defaultStart.setDate(defaultStart.getDate() - 7);
-  const defaultEnd = new Date(today);
-  defaultEnd.setDate(defaultEnd.getDate() + 30);
-  const defaultStartStr = defaultStart.toISOString().split('T')[0]!;
-  const defaultEndStr = defaultEnd.toISOString().split('T')[0]!;
+  const ganttStart = activeActivation?.startDate ?? (() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0]!;
+  })();
+  const ganttEnd = activeActivation?.endDate ?? (() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0]!;
+  })();
 
   // Assign dialog state
   const [assignDialog, setAssignDialog] = useState<{
@@ -53,6 +79,11 @@ export function AssignmentPage() {
   }>({ open: false, tankId: '', role: null });
   const [assignSoldierId, setAssignSoldierId] = useState('');
   const [assignWarnings, setAssignWarnings] = useState<string[]>([]);
+
+  // Vehicle creation dialog
+  const [showVehicleDialog, setShowVehicleDialog] = useState(false);
+  const [vehicleName, setVehicleName] = useState('');
+  const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>('standard');
 
   // Filter assignments active at viewDateTime for tank view
   const activeAssignments = useMemo(() => {
@@ -142,6 +173,19 @@ export function AssignmentPage() {
     await deleteAssignment(assignmentId);
   };
 
+  const handleCreateVehicle = async () => {
+    if (!vehicleName) return;
+    await addTank({
+      designation: vehicleName,
+      type: vehicleCategory === 'tank' ? 'מרכבה סימן 4' : 'רכב רגיל',
+      vehicleCategory,
+      status: 'operational',
+    });
+    setShowVehicleDialog(false);
+    setVehicleName('');
+    setVehicleCategory('standard');
+  };
+
   const isLoaded = assignments && soldiers && tanks && conflicts;
 
   return (
@@ -187,8 +231,8 @@ export function AssignmentPage() {
 
           <GanttChart
             rows={ganttRows}
-            startDate={defaultStartStr}
-            endDate={defaultEndStr}
+            startDate={ganttStart}
+            endDate={ganttEnd}
             showTodayMarker
           />
         </TabsContent>
@@ -196,7 +240,7 @@ export function AssignmentPage() {
         <TabsContent value="tanks">
           {isLoaded ? (
             <div className="space-y-4">
-              {/* Date/time selector */}
+              {/* Controls */}
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Label className="text-xs">הצג צוותים בתאריך:</Label>
@@ -210,22 +254,64 @@ export function AssignmentPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() =>
-                    openAssignDialog(tanks[0]?.id ?? '', 'commander')
-                  }
-                  disabled={!tanks?.length}
+                  onClick={() => setShowVehicleDialog(true)}
                 >
-                  <Plus className="h-4 w-4 ml-1" />
-                  שבץ חייל
+                  <Truck className="h-4 w-4 ml-1" />
+                  צור רכב חדש
                 </Button>
               </div>
 
-              {/* Tank cards grid */}
+              {/* Vehicle cards grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {tanks.map((tank) => {
                   const tankAssignments = activeAssignments.filter(
                     (a) => a.tankId === tank.id
                   );
+                  const isStandard = tank.vehicleCategory === 'standard';
+
+                  if (isStandard) {
+                    // Standard vehicle: simple member list
+                    return (
+                      <Card key={tank.id}>
+                        <CardContent className="p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold">{tank.designation}</span>
+                            <span className="text-xs text-muted-foreground bg-muted/30 px-2 py-0.5 rounded">רכב רגיל</span>
+                          </div>
+                          <div className="space-y-1">
+                            {tankAssignments.length === 0 && (
+                              <p className="text-xs text-muted-foreground text-center py-2">אין חיילים משובצים</p>
+                            )}
+                            {tankAssignments.map((a) => {
+                              const s = soldiers.find(s => s.id === a.soldierId);
+                              return (
+                                <div key={a.id} className="flex items-center justify-between text-xs border rounded px-2 py-1.5">
+                                  <span>{s ? `${s.firstName} ${s.lastName}` : '---'}</span>
+                                  <button
+                                    onClick={() => handleUnassign(a.id)}
+                                    className="text-destructive hover:text-destructive/80 text-xs"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full text-xs h-8"
+                            onClick={() => openAssignDialog(tank.id, 'fifth')}
+                          >
+                            <Plus className="h-3 w-3 me-1" />
+                            הוסף חייל
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+
+                  // Tank: standard 4-slot diagram
                   return (
                     <Card key={tank.id}>
                       <CardContent className="p-2">
@@ -245,8 +331,8 @@ export function AssignmentPage() {
 
               {tanks.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
-                  <p>אין טנקים להצגה</p>
-                  <p className="text-xs mt-1">הוסף טנקים בדף הטנקים</p>
+                  <p>אין רכבים להצגה</p>
+                  <p className="text-xs mt-1">לחץ "צור רכב חדש" להתחלה</p>
                 </div>
               )}
             </div>
@@ -272,9 +358,9 @@ export function AssignmentPage() {
             <DialogDescription>
               {assignDialog.role && assignDialog.role !== 'fifth'
                 ? `תפקיד: ${getCrewRoleLabel(assignDialog.role as CrewRole)}`
-                : 'איש צוות 5'}
+                : 'איש צוות'}
               {' | '}
-              טנק:{' '}
+              רכב:{' '}
               {tanks?.find((t) => t.id === assignDialog.tankId)?.designation ?? '---'}
             </DialogDescription>
           </DialogHeader>
@@ -315,6 +401,52 @@ export function AssignmentPage() {
             </Button>
             <Button onClick={handleAssignFromDialog} disabled={!assignSoldierId}>
               שבץ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create vehicle dialog */}
+      <Dialog open={showVehicleDialog} onOpenChange={setShowVehicleDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>צור רכב חדש</DialogTitle>
+            <DialogDescription>הוסף רכב חדש למערכת השיבוצים</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-sm">שם / מספר רכב</Label>
+              <Input
+                value={vehicleName}
+                onChange={(e) => setVehicleName(e.target.value)}
+                placeholder='לדוגמה: "413 - נ4" או "רכב פיקוד"'
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">סוג רכב</Label>
+              <select
+                value={vehicleCategory}
+                onChange={(e) => setVehicleCategory(e.target.value as VehicleCategory)}
+                className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {VEHICLE_CATEGORIES.map((vc) => (
+                  <option key={vc.value} value={vc.value}>
+                    {vc.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {vehicleCategory === 'tank'
+                  ? 'טנק — 4 תפקידים קבועים (מפקד, תותחן, נהג, טען)'
+                  : 'רכב רגיל — ללא הגבלת תפקידים או מספר אנשים'}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVehicleDialog(false)}>ביטול</Button>
+            <Button onClick={handleCreateVehicle} disabled={!vehicleName}>
+              <Plus className="h-4 w-4 me-1" />
+              צור רכב
             </Button>
           </DialogFooter>
         </DialogContent>

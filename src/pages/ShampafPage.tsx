@@ -4,14 +4,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ShampafTable } from '@/components/shampaf/ShampafTable';
 import { GanttChart } from '@/components/gantt/GanttChart';
 import type { GanttRow } from '@/components/gantt/GanttChart';
 import { useShampafEntries, useAllShampafVacations } from '@/hooks/useShampaf';
-import { useActivations, useCurrentActivation, addActivation, deleteActivation } from '@/hooks/useActivation';
+import { useActivations, addActivation, deleteActivation } from '@/hooks/useActivation';
 import { useSoldiers } from '@/hooks/useSoldiers';
+import { useAppStore } from '@/stores/useAppStore';
 import { SHAMPAF_COLORS } from '@/lib/constants';
 import { formatDate, dateRangesOverlap, todayString } from '@/lib/utils';
 
@@ -20,20 +20,16 @@ export function ShampafPage() {
   const vacations = useAllShampafVacations();
   const soldiers = useSoldiers();
   const activations = useActivations();
-  const currentActivation = useCurrentActivation();
+
+  // Global activation from store
+  const selectedActivationId = useAppStore(s => s.selectedActivationId);
+  const activeActivation = activations?.find(a => a.id === selectedActivationId) ?? null;
 
   // Activation dialog
   const [showActivationDialog, setShowActivationDialog] = useState(false);
   const [actName, setActName] = useState('');
   const [actStart, setActStart] = useState(todayString());
   const [actEnd, setActEnd] = useState('');
-
-  // Selected activation (default to current)
-  const [selectedActivationId, setSelectedActivationId] = useState<string | null>(null);
-
-  const activeActivation = selectedActivationId
-    ? activations?.find(a => a.id === selectedActivationId) ?? currentActivation
-    : currentActivation;
 
   // Filter entries by activation date range
   const entries = useMemo(() => {
@@ -112,41 +108,15 @@ export function ShampafPage() {
         <h2 className="text-2xl font-bold">שמ"פ - שירות מילואים פעיל</h2>
         <Button variant="outline" size="sm" onClick={() => setShowActivationDialog(true)}>
           <Settings2 className="h-4 w-4 me-1" />
-          הפעלה
+          ניהול הפעלות
         </Button>
       </div>
 
-      {/* Activation selector bar */}
-      {activations && activations.length > 0 && (
-        <Card>
-          <CardContent className="p-3">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm font-medium text-muted-foreground">הפעלה:</span>
-              {activations.map((act) => (
-                <button
-                  key={act.id}
-                  onClick={() => setSelectedActivationId(act.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors touch-target ${
-                    (activeActivation?.id === act.id)
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card border hover:bg-muted'
-                  }`}
-                >
-                  {act.name} ({formatDate(act.startDate)} - {formatDate(act.endDate)})
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* No activation message */}
       {activations && activations.length === 0 && (
-        <Card>
-          <CardContent className="p-4 text-center text-muted-foreground">
-            <p className="text-sm">לא הוגדרה הפעלה. לחץ "הפעלה" כדי ליצור תקופת הפעלה חדשה.</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border bg-card p-4 text-center text-muted-foreground">
+          <p className="text-sm">לא הוגדרה הפעלה. לחץ "ניהול הפעלות" כדי ליצור תקופת הפעלה חדשה.</p>
+        </div>
       )}
 
       <Tabs defaultValue="table" dir="rtl">
@@ -181,7 +151,7 @@ export function ShampafPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Activation dialog */}
+      {/* Activation management dialog */}
       <Dialog open={showActivationDialog} onOpenChange={setShowActivationDialog}>
         <DialogContent>
           <DialogHeader>
