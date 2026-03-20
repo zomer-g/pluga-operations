@@ -296,10 +296,10 @@ export function AssignmentTable({
         {/* Actions */}
         <td className="py-1 px-2">
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={saveAssignment} title="שמור">
+            <Button variant="ghost" size="icon" onClick={saveAssignment} title="שמור" aria-label="שמור">
               <Save className="h-4 w-4 text-emerald-500" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={cancelEdit} title="בטל">
+            <Button variant="ghost" size="icon" onClick={cancelEdit} title="בטל" aria-label="ביטול">
               <XCircle className="h-4 w-4 text-muted-foreground" />
             </Button>
           </div>
@@ -401,6 +401,7 @@ export function AssignmentTable({
                         size="icon"
                         onClick={() => startEdit(a)}
                         title="ערוך"
+                        aria-label="ערוך"
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -409,6 +410,7 @@ export function AssignmentTable({
                         size="icon"
                         onClick={() => handleDelete(a.id)}
                         title="מחק"
+                        aria-label="מחק"
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

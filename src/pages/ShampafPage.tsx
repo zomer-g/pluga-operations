@@ -166,7 +166,7 @@ export function ShampafPage() {
               {activations.map((act) => (
                 <div key={act.id} className="flex items-center justify-between p-2 rounded border text-sm">
                   <span>{act.name} — {formatDate(act.startDate)} עד {formatDate(act.endDate)}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteActivation(act.id)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteActivation(act.id)} aria-label="מחק הפעלה">
                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                   </Button>
                 </div>

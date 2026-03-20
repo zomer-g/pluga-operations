@@ -205,8 +205,8 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
                 <td className="py-2 px-2 text-center text-muted-foreground">-</td>
                 <td className="py-2 px-2">
                   <div className="flex justify-center gap-0.5">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={saveEntry}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={cancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={saveEntry} aria-label="שמור"><Check className="h-4 w-4 text-emerald-500" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={cancelEdit} aria-label="ביטול"><X className="h-4 w-4 text-muted-foreground" /></Button>
                   </div>
                 </td>
               </tr>
@@ -260,13 +260,13 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
                     <td className="py-2 px-2">
                       {isEditing ? (
                         <div className="flex justify-center gap-0.5">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={saveEntry}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={cancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={saveEntry} aria-label="שמור"><Check className="h-4 w-4 text-emerald-500" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={cancelEdit} aria-label="ביטול"><X className="h-4 w-4 text-muted-foreground" /></Button>
                         </div>
                       ) : (
                         <div className="flex justify-center gap-0.5">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEdit(entry)}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => deleteShampafEntry(entry.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEdit(entry)} aria-label="ערוך"><Pencil className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => deleteShampafEntry(entry.id)} aria-label="מחק"><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                         </div>
                       )}
                     </td>
@@ -302,8 +302,8 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
                           <td colSpan={2}></td>
                           <td className="py-1.5 px-2">
                             <div className="flex justify-center gap-0.5">
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={saveVac}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={cancelVacEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={saveVac} aria-label="שמור חופשה"><Check className="h-4 w-4 text-emerald-500" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={cancelVacEdit} aria-label="ביטול חופשה"><X className="h-4 w-4 text-muted-foreground" /></Button>
                             </div>
                           </td>
                         </tr>
@@ -335,13 +335,13 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
                             <td className="py-1.5 px-2">
                               {isVacEditing ? (
                                 <div className="flex justify-center gap-0.5">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={saveVac}><Check className="h-3.5 w-3.5 text-emerald-500" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelVacEdit}><X className="h-3.5 w-3.5 text-muted-foreground" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={saveVac} aria-label="שמור חופשה"><Check className="h-3.5 w-3.5 text-emerald-500" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelVacEdit} aria-label="ביטול חופשה"><X className="h-3.5 w-3.5 text-muted-foreground" /></Button>
                                 </div>
                               ) : (
                                 <div className="flex justify-center gap-0.5">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEditVac(vac)}><Pencil className="h-3 w-3" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteShampafVacation(vac.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEditVac(vac)} aria-label="ערוך חופשה"><Pencil className="h-3 w-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteShampafVacation(vac.id)} aria-label="מחק חופשה"><Trash2 className="h-3 w-3 text-destructive" /></Button>
                                 </div>
                               )}
                             </td>

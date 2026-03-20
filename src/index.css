@@ -10,7 +10,7 @@
   --color-destructive: #dc2626;
   --color-destructive-foreground: #ffffff;
   --color-muted: #64748b;
-  --color-muted-foreground: #94a3b8;
+  --color-muted-foreground: #b0bec5;
   --color-border: #475569;
   --color-ring: #3b82f6;
   --color-background: #0f172a;
@@ -56,7 +56,7 @@ body {
   --color-accent: #d4a843;
   --color-accent-foreground: #1a1a1a;
   --color-muted: #94a3b8;
-  --color-muted-foreground: #64748b;
+  --color-muted-foreground: #546170;
   --color-border: #cbd5e1;
   --color-background: #f8fafc;
   --color-foreground: #0f172a;
@@ -85,6 +85,19 @@ body {
 /* Safe area for mobile */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Selection styling */
+::selection {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+/* Focus visible for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* Touch targets */
