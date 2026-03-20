@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut as firebaseSignOut, type User } from 'firebase/auth';
 import { auth, googleProvider } from '@/firebase';
+import { ensureUserPermission } from '@/features/permissions/usePermissions';
 
 interface AuthUser {
   email: string;
@@ -42,10 +43,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        setUser(firebaseUserToAuthUser(firebaseUser));
+        const authUser = firebaseUserToAuthUser(firebaseUser);
+        setUser(authUser);
         setAuthError(null);
+        // Ensure permission doc exists for this user
+        try {
+          await ensureUserPermission({ sub: authUser.sub, email: authUser.email, name: authUser.name });
+        } catch (err) {
+          console.warn('Failed to ensure user permission:', err);
+        }
       } else {
         setUser(null);
       }
