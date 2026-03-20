@@ -3,16 +3,13 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDo
 import { db } from '@/firebase';
 import type { ShampafEntry, ShampafVacation } from '@/db/schema';
 import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
-import { useCacheEnabled } from '@/stores/useAppStore';
 
 // ===== Queries =====
 
 export function useShampafEntries(soldierId?: string) {
   const [entries, setEntries] = useState<ShampafEntry[] | undefined>();
-  const enabled = useCacheEnabled('shampaf');
 
   useEffect(() => {
-    if (!enabled) { setEntries(undefined); return; }
     const q = soldierId
       ? query(collection(db, 'shampafEntries'), where('soldierId', '==', soldierId))
       : query(collection(db, 'shampafEntries'));
@@ -20,17 +17,15 @@ export function useShampafEntries(soldierId?: string) {
       setEntries(snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry)));
     });
     return unsub;
-  }, [enabled, soldierId]);
+  }, [soldierId]);
 
   return entries;
 }
 
 export function useShampafVacations(shampafEntryId?: string) {
   const [vacations, setVacations] = useState<ShampafVacation[] | undefined>();
-  const enabled = useCacheEnabled('shampaf');
 
   useEffect(() => {
-    if (!enabled) { setVacations(undefined); return; }
     const q = shampafEntryId
       ? query(collection(db, 'shampafVacations'), where('shampafEntryId', '==', shampafEntryId))
       : query(collection(db, 'shampafVacations'));
@@ -38,38 +33,34 @@ export function useShampafVacations(shampafEntryId?: string) {
       setVacations(snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafVacation)));
     });
     return unsub;
-  }, [enabled, shampafEntryId]);
+  }, [shampafEntryId]);
 
   return vacations;
 }
 
 export function useAllShampafVacations() {
   const [vacations, setVacations] = useState<ShampafVacation[] | undefined>();
-  const enabled = useCacheEnabled('shampaf');
 
   useEffect(() => {
-    if (!enabled) { setVacations(undefined); return; }
     const unsub = onSnapshot(collection(db, 'shampafVacations'), (snap) => {
       setVacations(snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafVacation)));
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return vacations;
 }
 
 export function useShampafForDateRange(startDate: string, endDate: string) {
   const [entries, setEntries] = useState<ShampafEntry[] | undefined>();
-  const enabled = useCacheEnabled('shampaf');
 
   useEffect(() => {
-    if (!enabled) { setEntries(undefined); return; }
     const unsub = onSnapshot(collection(db, 'shampafEntries'), (snap) => {
       const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
       setEntries(all.filter(e => dateRangesOverlap(e.startDateTime, e.endDateTime, startDate, endDate)));
     });
     return unsub;
-  }, [enabled, startDate, endDate]);
+  }, [startDate, endDate]);
 
   return entries;
 }
@@ -78,10 +69,8 @@ export type ShampafStatus = 'mobilized' | 'vacation' | 'none';
 
 export function useSoldierShampafStatus(soldierId: string | undefined, dateTime?: string): ShampafStatus | undefined {
   const [status, setStatus] = useState<ShampafStatus | undefined>();
-  const enabled = useCacheEnabled('shampaf');
 
   useEffect(() => {
-    if (!enabled) { setStatus(undefined); return; }
     if (!soldierId) {
       setStatus('none');
       return;
@@ -108,7 +97,7 @@ export function useSoldierShampafStatus(soldierId: string | undefined, dateTime?
       setStatus(onVacation ? 'vacation' : 'mobilized');
     });
     return unsub;
-  }, [enabled, soldierId, dateTime]);
+  }, [soldierId, dateTime]);
 
   return status;
 }

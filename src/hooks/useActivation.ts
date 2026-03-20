@@ -3,29 +3,24 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'fireb
 import { db } from '@/firebase';
 import type { Activation } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
-import { useCacheEnabled } from '@/stores/useAppStore';
 
 export function useActivations() {
   const [activations, setActivations] = useState<Activation[] | undefined>();
-  const enabled = useCacheEnabled('activations');
 
   useEffect(() => {
-    if (!enabled) { setActivations(undefined); return; }
     const unsub = onSnapshot(collection(db, 'activations'), (snap) => {
       setActivations(snap.docs.map(d => ({ ...d.data(), id: d.id } as Activation)));
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return activations;
 }
 
 export function useCurrentActivation() {
   const [activation, setActivation] = useState<Activation | null | undefined>();
-  const enabled = useCacheEnabled('activations');
 
   useEffect(() => {
-    if (!enabled) { setActivation(undefined); return; }
     const unsub = onSnapshot(collection(db, 'activations'), (snap) => {
       const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Activation));
       const today = new Date().toISOString().split('T')[0]!;
@@ -39,7 +34,7 @@ export function useCurrentActivation() {
       }
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return activation;
 }

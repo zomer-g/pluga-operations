@@ -4,14 +4,11 @@ import { db } from '@/firebase';
 import type { Tank, TankCrewAssignment, CrewRole } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
 import type { TankFormData, CrewAssignFormData } from '@/lib/validators';
-import { useCacheEnabled } from '@/stores/useAppStore';
 
 export function useTanks(platoonId?: string) {
   const [tanks, setTanks] = useState<Tank[] | undefined>();
-  const enabled = useCacheEnabled('tanks');
 
   useEffect(() => {
-    if (!enabled) { setTanks(undefined); return; }
     const q = platoonId
       ? query(collection(db, 'tanks'), where('platoonId', '==', platoonId))
       : query(collection(db, 'tanks'), orderBy('designation'));
@@ -19,17 +16,16 @@ export function useTanks(platoonId?: string) {
       setTanks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Tank)));
     });
     return unsub;
-  }, [enabled, platoonId]);
+  }, [platoonId]);
 
   return tanks;
 }
 
 export function useTank(id: string | undefined) {
   const [tank, setTank] = useState<Tank | undefined>();
-  const enabled = useCacheEnabled('tanks');
 
   useEffect(() => {
-    if (!enabled || !id) {
+    if (!id) {
       setTank(undefined);
       return;
     }
@@ -41,17 +37,15 @@ export function useTank(id: string | undefined) {
       }
     });
     return unsub;
-  }, [enabled, id]);
+  }, [id]);
 
   return tank;
 }
 
 export function useTankCount() {
   const [counts, setCounts] = useState<{ total: number; operational: number } | undefined>();
-  const enabled = useCacheEnabled('tanks');
 
   useEffect(() => {
-    if (!enabled) { setCounts(undefined); return; }
     const unsub = onSnapshot(collection(db, 'tanks'), (snap) => {
       const tanks = snap.docs.map(d => d.data() as Tank);
       setCounts({
@@ -60,17 +54,15 @@ export function useTankCount() {
       });
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return counts;
 }
 
 export function useTankCrew(tankId: string | undefined) {
   const [crew, setCrew] = useState<TankCrewAssignment[] | undefined>();
-  const enabled = useCacheEnabled('tanks');
 
   useEffect(() => {
-    if (!enabled) { setCrew(undefined); return; }
     if (!tankId) {
       setCrew([]);
       return;
@@ -81,17 +73,16 @@ export function useTankCrew(tankId: string | undefined) {
       setCrew(all.filter(a => !a.endDate));
     });
     return unsub;
-  }, [enabled, tankId]);
+  }, [tankId]);
 
   return crew;
 }
 
 export function useSoldierCrewAssignment(soldierId: string | undefined) {
   const [assignment, setAssignment] = useState<TankCrewAssignment | undefined>();
-  const enabled = useCacheEnabled('tanks');
 
   useEffect(() => {
-    if (!enabled || !soldierId) {
+    if (!soldierId) {
       setAssignment(undefined);
       return;
     }
@@ -101,23 +92,21 @@ export function useSoldierCrewAssignment(soldierId: string | undefined) {
       setAssignment(all.find(a => !a.endDate));
     });
     return unsub;
-  }, [enabled, soldierId]);
+  }, [soldierId]);
 
   return assignment;
 }
 
 export function useAllCrewAssignments() {
   const [assignments, setAssignments] = useState<TankCrewAssignment[] | undefined>();
-  const enabled = useCacheEnabled('tanks');
 
   useEffect(() => {
-    if (!enabled) { setAssignments(undefined); return; }
     const unsub = onSnapshot(collection(db, 'tankCrewAssignments'), (snap) => {
       const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as TankCrewAssignment));
       setAssignments(all.filter(a => !a.endDate));
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return assignments;
 }
@@ -203,16 +192,14 @@ export async function unassignCrew(assignmentId: string): Promise<void> {
 
 export function usePlatoons() {
   const [platoons, setPlatoons] = useState<{ id: string; name: string; number: number }[] | undefined>();
-  const platoonsEnabled = useCacheEnabled('platoons');
 
   useEffect(() => {
-    if (!platoonsEnabled) { setPlatoons(undefined); return; }
     const q = query(collection(db, 'platoons'), orderBy('number'));
     const unsub = onSnapshot(q, (snap) => {
       setPlatoons(snap.docs.map(d => ({ ...d.data(), id: d.id } as { id: string; name: string; number: number })));
     });
     return unsub;
-  }, [platoonsEnabled]);
+  }, []);
 
   return platoons;
 }

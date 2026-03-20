@@ -4,7 +4,6 @@ import { db } from '@/firebase';
 import type { Soldier, SoldierRank } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
 import type { SoldierFormData } from '@/lib/validators';
-import { useCacheEnabled } from '@/stores/useAppStore';
 
 interface SoldierFilters {
   search?: string;
@@ -15,10 +14,8 @@ interface SoldierFilters {
 
 export function useSoldiers(filters?: SoldierFilters) {
   const [soldiers, setSoldiers] = useState<Soldier[] | undefined>();
-  const enabled = useCacheEnabled('soldiers');
 
   useEffect(() => {
-    if (!enabled) { setSoldiers(undefined); return; }
     const q = query(collection(db, 'soldiers'), orderBy('lastName'));
     const unsub = onSnapshot(q, async (snap) => {
       let result = snap.docs.map(d => ({ ...d.data(), id: d.id } as Soldier));
@@ -58,17 +55,16 @@ export function useSoldiers(filters?: SoldierFilters) {
       setSoldiers(result);
     });
     return unsub;
-  }, [enabled, filters?.search, filters?.rank, filters?.platoonId, filters?.status]);
+  }, [filters?.search, filters?.rank, filters?.platoonId, filters?.status]);
 
   return soldiers;
 }
 
 export function useSoldier(id: string | undefined) {
   const [soldier, setSoldier] = useState<Soldier | undefined>();
-  const enabled = useCacheEnabled('soldiers');
 
   useEffect(() => {
-    if (!enabled || !id) {
+    if (!id) {
       setSoldier(undefined);
       return;
     }
@@ -80,22 +76,20 @@ export function useSoldier(id: string | undefined) {
       }
     });
     return unsub;
-  }, [enabled, id]);
+  }, [id]);
 
   return soldier;
 }
 
 export function useSoldierCount() {
   const [count, setCount] = useState<number | undefined>();
-  const enabled = useCacheEnabled('soldiers');
 
   useEffect(() => {
-    if (!enabled) { setCount(undefined); return; }
     const unsub = onSnapshot(collection(db, 'soldiers'), (snap) => {
       setCount(snap.size);
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return count;
 }

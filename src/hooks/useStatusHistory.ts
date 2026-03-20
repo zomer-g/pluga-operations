@@ -4,14 +4,11 @@ import { db } from '@/firebase';
 import type { StatusEntry, SoldierStatus } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
 import type { StatusEntryFormData } from '@/lib/validators';
-import { useCacheEnabled } from '@/stores/useAppStore';
 
 export function useStatusHistory(soldierId?: string) {
   const [entries, setEntries] = useState<StatusEntry[] | undefined>();
-  const enabled = useCacheEnabled('statuses');
 
   useEffect(() => {
-    if (!enabled) { setEntries(undefined); return; }
     if (!soldierId) {
       setEntries([]);
       return;
@@ -23,17 +20,16 @@ export function useStatusHistory(soldierId?: string) {
       setEntries(result);
     });
     return unsub;
-  }, [enabled, soldierId]);
+  }, [soldierId]);
 
   return entries;
 }
 
 export function useCurrentStatus(soldierId?: string) {
   const [status, setStatus] = useState<StatusEntry | undefined>();
-  const enabled = useCacheEnabled('statuses');
 
   useEffect(() => {
-    if (!enabled || !soldierId) {
+    if (!soldierId) {
       setStatus(undefined);
       return;
     }
@@ -43,17 +39,15 @@ export function useCurrentStatus(soldierId?: string) {
       setStatus(entries.find(e => !e.endDate));
     });
     return unsub;
-  }, [enabled, soldierId]);
+  }, [soldierId]);
 
   return status;
 }
 
 export function useAllCurrentStatuses() {
   const [statusMap, setStatusMap] = useState<Map<string, StatusEntry> | undefined>();
-  const enabled = useCacheEnabled('statuses');
 
   useEffect(() => {
-    if (!enabled) { setStatusMap(undefined); return; }
     const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
       const currentMap = new Map<string, StatusEntry>();
       for (const d of snap.docs) {
@@ -65,17 +59,15 @@ export function useAllCurrentStatuses() {
       setStatusMap(currentMap);
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return statusMap;
 }
 
 export function useStatusCounts() {
   const [counts, setCounts] = useState<Record<string, number> | undefined>();
-  const enabled = useCacheEnabled('statuses');
 
   useEffect(() => {
-    if (!enabled) { setCounts(undefined); return; }
     const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
       const result: Record<string, number> = {};
       for (const d of snap.docs) {
@@ -87,22 +79,20 @@ export function useStatusCounts() {
       setCounts(result);
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return counts;
 }
 
 export function useAllStatusEntries() {
   const [entries, setEntries] = useState<StatusEntry[] | undefined>();
-  const enabled = useCacheEnabled('statuses');
 
   useEffect(() => {
-    if (!enabled) { setEntries(undefined); return; }
     const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
       setEntries(snap.docs.map(d => ({ ...d.data(), id: d.id } as StatusEntry)));
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return entries;
 }

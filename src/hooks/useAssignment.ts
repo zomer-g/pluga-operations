@@ -4,7 +4,6 @@ import { db } from '@/firebase';
 import type { Assignment, CrewRole, ShampafEntry, ShampafVacation } from '@/db/schema';
 import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
 import { getSoldierShampafStatusAt } from './useShampaf';
-import { useCacheEnabled } from '@/stores/useAppStore';
 
 // ===== Queries =====
 
@@ -17,10 +16,8 @@ interface AssignmentFilters {
 
 export function useAssignments(filters?: AssignmentFilters) {
   const [assignments, setAssignments] = useState<Assignment[] | undefined>();
-  const enabled = useCacheEnabled('assignments');
 
   useEffect(() => {
-    if (!enabled) { setAssignments(undefined); return; }
     const unsub = onSnapshot(collection(db, 'assignments'), (snap) => {
       let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
 
@@ -39,17 +36,15 @@ export function useAssignments(filters?: AssignmentFilters) {
       setAssignments(results);
     });
     return unsub;
-  }, [enabled, filters?.soldierId, filters?.tankId, filters?.startDate, filters?.endDate]);
+  }, [filters?.soldierId, filters?.tankId, filters?.startDate, filters?.endDate]);
 
   return assignments;
 }
 
 export function useTankAssignmentsAt(tankId: string | undefined, dateTime?: string) {
   const [assignments, setAssignments] = useState<Assignment[] | undefined>();
-  const enabled = useCacheEnabled('assignments');
 
   useEffect(() => {
-    if (!enabled) { setAssignments(undefined); return; }
     if (!tankId) {
       setAssignments([]);
       return;
@@ -61,7 +56,7 @@ export function useTankAssignmentsAt(tankId: string | undefined, dateTime?: stri
       setAssignments(all.filter(a => a.startDateTime <= now && a.endDateTime >= now));
     });
     return unsub;
-  }, [enabled, tankId, dateTime]);
+  }, [tankId, dateTime]);
 
   return assignments;
 }
@@ -70,10 +65,8 @@ export type ConflictType = 'no_shampaf' | 'on_vacation';
 
 export function useAssignmentConflicts() {
   const [conflicts, setConflicts] = useState<Map<string, ConflictType[]> | undefined>();
-  const enabled = useCacheEnabled('assignments');
 
   useEffect(() => {
-    if (!enabled) { setConflicts(undefined); return; }
     const unsub = onSnapshot(collection(db, 'assignments'), async (snap) => {
       const assignments = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
       const now = new Date().toISOString();
@@ -113,7 +106,7 @@ export function useAssignmentConflicts() {
       setConflicts(result);
     });
     return unsub;
-  }, [enabled]);
+  }, []);
 
   return conflicts;
 }
