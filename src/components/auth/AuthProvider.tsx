@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut as firebaseSignOut, type User } from 'firebase/auth';
 import { auth, googleProvider } from '@/firebase';
 
 interface AuthUser {
@@ -39,11 +39,13 @@ function firebaseUserToAuthUser(user: User): AuthUser {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUserToAuthUser(firebaseUser));
+        setAuthError(null);
       } else {
         setUser(null);
       }
@@ -53,10 +55,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async () => {
+    setAuthError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      console.error('Sign in error:', err);
+    } catch (err: unknown) {
+      const firebaseErr = err as { code?: string; message?: string };
+      console.error('Sign in popup error:', firebaseErr);
+
+      // If popup was blocked or closed, fall back to redirect
+      if (firebaseErr.code === 'auth/popup-blocked' || firebaseErr.code === 'auth/popup-closed-by-user') {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectErr) {
+          console.error('Sign in redirect error:', redirectErr);
+        }
+      }
+
+      // Show user-friendly error messages
+      const errorMessages: Record<string, string> = {
+        'auth/popup-closed-by-user': 'החלון נסגר - נסה שוב',
+        'auth/popup-blocked': 'החלון נחסם - מנסה דרך אחרת...',
+        'auth/unauthorized-domain': 'הדומיין לא מורשה - יש להוסיף אותו בקונסול Firebase',
+        'auth/operation-not-allowed': 'התחברות עם Google לא מופעלת - יש להפעיל בקונסול Firebase',
+        'auth/network-request-failed': 'שגיאת רשת - בדוק חיבור לאינטרנט',
+      };
+
+      setAuthError(
+        errorMessages[firebaseErr.code ?? ''] ??
+        `שגיאת התחברות: ${firebaseErr.code ?? firebaseErr.message ?? 'unknown'}`
+      );
     }
   };
 
@@ -94,6 +122,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             </svg>
             התחבר עם Google
           </button>
+          {authError && (
+            <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm max-w-xs mx-auto">
+              {authError}
+            </div>
+          )}
         </div>
       </div>
     );
