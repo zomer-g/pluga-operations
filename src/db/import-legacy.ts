@@ -1,7 +1,7 @@
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Soldier, Tank, Platoon, Assignment, ShampafEntry, CrewRole } from './schema';
-import { generateId, stripUndefined } from '@/lib/utils';
+import { generateId } from '@/lib/utils';
 
 const ROLE_MAP: Record<string, CrewRole | undefined> = {
   'מפקד': 'commander',
@@ -139,6 +139,10 @@ export async function importLegacyData(csvData: {
     return assignment as unknown as Assignment;
   });
 
+  // Clean object: remove all undefined/null values (Firestore rejects undefined)
+  const clean = (obj: Record<string, unknown>): Record<string, any> =>
+    JSON.parse(JSON.stringify(obj));
+
   // Write to Firestore in batches
   const writeBatchData = async (collectionName: string, items: Record<string, unknown>[]) => {
     // Clear existing
@@ -152,8 +156,9 @@ export async function importLegacyData(csvData: {
     for (let i = 0; i < items.length; i += 500) {
       const batch = writeBatch(db);
       for (const item of items.slice(i, i + 500)) {
-        const id = item['id'] as string;
-        batch.set(doc(db, collectionName, id), stripUndefined(item));
+        const cleaned = clean(item);
+        const id = cleaned['id'] as string;
+        batch.set(doc(db, collectionName, id), cleaned);
       }
       await batch.commit();
     }
