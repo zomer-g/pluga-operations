@@ -8,6 +8,9 @@ import type {
   TankStatus,
   CrewRole,
   VehicleCategory,
+  DonationType,
+  TrainingContentType,
+  PermissionAction,
 } from '@/db/schema';
 
 export const RANKS: { value: SoldierRank; label: string }[] = [
@@ -130,3 +133,59 @@ export function getStatusBadgeVariant(status: SoldierStatus): string {
 export function getCrewRoleLabel(role: CrewRole): string {
   return CREW_ROLES.find(r => r.value === role)?.label ?? role;
 }
+
+// ===== Donation Types =====
+
+export const DONATION_TYPES: { value: DonationType; label: string }[] = [
+  { value: 'monetary', label: 'כספית' },
+  { value: 'equipment', label: 'ציוד' },
+  { value: 'supplies', label: 'אספקה' },
+  { value: 'other', label: 'אחר' },
+];
+
+export function getDonationTypeLabel(type: DonationType): string {
+  return DONATION_TYPES.find(t => t.value === type)?.label ?? type;
+}
+
+// ===== Training Content Types =====
+
+export const TRAINING_CONTENT_TYPES: { value: TrainingContentType; label: string }[] = [
+  { value: 'document', label: 'מסמך' },
+  { value: 'video', label: 'סרטון' },
+  { value: 'presentation', label: 'מצגת' },
+  { value: 'link', label: 'קישור' },
+  { value: 'other', label: 'אחר' },
+];
+
+export function getTrainingContentTypeLabel(type: TrainingContentType): string {
+  return TRAINING_CONTENT_TYPES.find(t => t.value === type)?.label ?? type;
+}
+
+// ===== Permission Actions =====
+
+export const PERMISSION_ACTIONS: { value: PermissionAction; label: string }[] = [
+  { value: 'view', label: 'צפייה' },
+  { value: 'edit', label: 'עריכה' },
+  { value: 'admin', label: 'ניהול' },
+];
+
+export function getPermissionActionLabel(action: PermissionAction): string {
+  return PERMISSION_ACTIONS.find(a => a.value === action)?.label ?? action;
+}
+
+// ===== Page Routes =====
+
+export const ALL_PAGE_ROUTES: { route: string; label: string }[] = [
+  { route: '/', label: 'לוח בקרה' },
+  { route: '/soldiers', label: 'חיילים' },
+  { route: '/equipment', label: 'ציוד' },
+  { route: '/shampaf', label: 'שמ"פ' },
+  { route: '/assignments', label: 'שיבוץ' },
+  { route: '/routine', label: 'שגרה' },
+  { route: '/officer-tasks', label: 'משימות קצין' },
+  { route: '/training', label: 'הדרכה' },
+  { route: '/donations', label: 'תרומות' },
+  { route: '/reports', label: 'דוחות' },
+  { route: '/settings', label: 'הגדרות' },
+  { route: '/permissions', label: 'הרשאות' },
+];

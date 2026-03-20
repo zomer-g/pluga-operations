@@ -114,3 +114,67 @@ export const assignmentSchema = z.object({
 });
 
 export type AssignmentFormData = z.infer<typeof assignmentSchema>;
+
+// ===== Routine Templates =====
+
+export const routineTemplateSchema = z.object({
+  name: z.string().min(1, 'שם שגרה נדרש'),
+  tankId: z.string().min(1, 'רכב נדרש'),
+  notes: z.string().optional(),
+});
+
+export type RoutineTemplateFormData = z.infer<typeof routineTemplateSchema>;
+
+// ===== Training Content =====
+
+export const trainingContentSchema = z.object({
+  title: z.string().min(1, 'כותרת נדרשת'),
+  description: z.string().optional(),
+  contentType: z.enum(['document', 'video', 'presentation', 'link', 'other']),
+  contentBody: z.string().optional(),
+  externalUrl: z.string().url('כתובת URL לא תקינה').optional().or(z.literal('')),
+  tags: z.array(z.string()).default([]),
+  category: z.string().min(1, 'קטגוריה נדרשת'),
+});
+
+export type TrainingContentFormData = z.infer<typeof trainingContentSchema>;
+
+export const trainingTagSchema = z.object({
+  name: z.string().min(1, 'שם תגית נדרש'),
+  color: z.string().optional(),
+});
+
+export type TrainingTagFormData = z.infer<typeof trainingTagSchema>;
+
+export const trainingCategorySchema = z.object({
+  name: z.string().min(1, 'שם קטגוריה נדרש'),
+  order: z.coerce.number().default(0),
+});
+
+export type TrainingCategoryFormData = z.infer<typeof trainingCategorySchema>;
+
+// ===== Donations =====
+
+export const donationSchema = z.object({
+  donorName: z.string().min(1, 'שם תורם נדרש'),
+  donorContact: z.string().optional(),
+  donorPhone: z.string().optional(),
+  donorEmail: z.string().email('כתובת אימייל לא תקינה').optional().or(z.literal('')),
+  type: z.enum(['monetary', 'equipment', 'supplies', 'other']),
+  amount: z.coerce.number().optional(),
+  description: z.string().min(1, 'תיאור נדרש'),
+  itemsList: z.string().optional(),
+  date: z.string().min(1, 'תאריך נדרש'),
+  notes: z.string().optional(),
+});
+
+export type DonationFormData = z.infer<typeof donationSchema>;
+
+// ===== Permissions =====
+
+export const permissionGroupSchema = z.object({
+  name: z.string().min(1, 'שם קבוצה נדרש'),
+  isDefault: z.boolean().default(false),
+});
+
+export type PermissionGroupFormData = z.infer<typeof permissionGroupSchema>;

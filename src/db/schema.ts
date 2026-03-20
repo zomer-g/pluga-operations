@@ -179,3 +179,89 @@ export interface Assignment {
   endDateTime: string;
   notes?: string;
 }
+
+// ===== שגרה (Routine Templates) =====
+
+export interface RoutineCrewSlot {
+  role: CrewRole;
+  soldierId: string;
+}
+
+export interface RoutineTemplate {
+  id: string;
+  name: string;
+  tankId: string;
+  crewSlots: RoutineCrewSlot[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ===== תוכן הדרכה (Training Content) =====
+
+export type TrainingContentType = 'document' | 'video' | 'presentation' | 'link' | 'other';
+
+export interface TrainingContent {
+  id: string;
+  title: string;
+  description?: string;
+  contentType: TrainingContentType;
+  contentBody?: string;
+  fileUrl?: string;
+  externalUrl?: string;
+  tags: string[];
+  category: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TrainingTag {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+export interface TrainingCategory {
+  id: string;
+  name: string;
+  order: number;
+}
+
+// ===== תרומות (Donations) =====
+
+export type DonationType = 'monetary' | 'equipment' | 'supplies' | 'other';
+
+export interface Donation {
+  id: string;
+  donorName: string;
+  donorContact?: string;
+  donorPhone?: string;
+  donorEmail?: string;
+  type: DonationType;
+  amount?: number;
+  description: string;
+  itemsList?: string;
+  date: string;
+  notes?: string;
+  createdAt: string;
+}
+
+// ===== הרשאות (Permissions) =====
+
+export type PermissionAction = 'view' | 'edit' | 'admin';
+
+export interface UserPermission {
+  id: string;
+  email: string;
+  displayName: string;
+  groupId: string;
+  customPageOverrides?: Record<string, PermissionAction>;
+}
+
+export interface PermissionGroup {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  pagePermissions: Record<string, PermissionAction>;
+}
