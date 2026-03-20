@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { EquipmentAssignment, EquipmentType } from '@/db/schema';
-import { generateId, todayString } from '@/lib/utils';
+import { generateId, todayString, stripUndefined } from '@/lib/utils';
 import type { EquipmentAssignFormData, EquipmentTypeFormData } from '@/lib/validators';
 import { useCacheEnabled } from '@/stores/useAppStore';
 
@@ -98,7 +98,7 @@ export async function assignEquipment(
     condition: data.condition as EquipmentAssignment['condition'],
     notes: data.notes || undefined,
   };
-  await setDoc(doc(db, 'equipmentAssignments', id), assignment);
+  await setDoc(doc(db, 'equipmentAssignments', id), stripUndefined(assignment as unknown as Record<string, unknown>));
   return id;
 }
 
@@ -107,11 +107,11 @@ export async function returnEquipment(
   condition: string,
   notes?: string
 ): Promise<void> {
-  await updateDoc(doc(db, 'equipmentAssignments', assignmentId), {
+  await updateDoc(doc(db, 'equipmentAssignments', assignmentId), stripUndefined({
     signedInDate: todayString(),
     condition: condition as EquipmentAssignment['condition'],
     notes,
-  });
+  } as Record<string, unknown>));
 }
 
 export async function deleteEquipmentType(id: string): Promise<void> {

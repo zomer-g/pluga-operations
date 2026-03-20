@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Soldier, SoldierRank } from '@/db/schema';
-import { generateId } from '@/lib/utils';
+import { generateId, stripUndefined } from '@/lib/utils';
 import type { SoldierFormData } from '@/lib/validators';
 import { useCacheEnabled } from '@/stores/useAppStore';
 
@@ -115,12 +115,12 @@ export async function addSoldier(data: SoldierFormData): Promise<string> {
     createdAt: now,
     updatedAt: now,
   };
-  await setDoc(doc(db, 'soldiers', id), soldier);
+  await setDoc(doc(db, 'soldiers', id), stripUndefined(soldier as unknown as Record<string, unknown>));
   return id;
 }
 
 export async function updateSoldier(id: string, data: SoldierFormData): Promise<void> {
-  await updateDoc(doc(db, 'soldiers', id), { ...data, email: data.email || undefined, updatedAt: new Date().toISOString() });
+  await updateDoc(doc(db, 'soldiers', id), stripUndefined({ ...data, email: data.email || undefined, updatedAt: new Date().toISOString() } as Record<string, unknown>));
 }
 
 export async function deleteSoldier(id: string): Promise<void> {

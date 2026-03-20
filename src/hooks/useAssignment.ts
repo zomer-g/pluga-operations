@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, getDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Assignment, CrewRole, ShampafEntry, ShampafVacation } from '@/db/schema';
-import { generateId, dateRangesOverlap } from '@/lib/utils';
+import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
 import { getSoldierShampafStatusAt } from './useShampaf';
 import { useCacheEnabled } from '@/stores/useAppStore';
 
@@ -168,13 +168,13 @@ export async function addAssignment(data: {
     endDateTime: data.endDateTime,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'assignments', id), assignment);
+  await setDoc(doc(db, 'assignments', id), stripUndefined(assignment as unknown as Record<string, unknown>));
 
   return { id, warnings };
 }
 
 export async function updateAssignment(id: string, data: Partial<Assignment>): Promise<void> {
-  await updateDoc(doc(db, 'assignments', id), data);
+  await updateDoc(doc(db, 'assignments', id), stripUndefined(data as Record<string, unknown>));
 }
 
 export async function deleteAssignment(id: string): Promise<void> {

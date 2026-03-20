@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Activation } from '@/db/schema';
-import { generateId } from '@/lib/utils';
+import { generateId, stripUndefined } from '@/lib/utils';
 import { useCacheEnabled } from '@/stores/useAppStore';
 
 export function useActivations() {
@@ -52,12 +52,12 @@ export async function addActivation(data: {
 }): Promise<string> {
   const id = generateId();
   const activation: Activation = { id, ...data };
-  await setDoc(doc(db, 'activations', id), activation);
+  await setDoc(doc(db, 'activations', id), stripUndefined(activation as unknown as Record<string, unknown>));
   return id;
 }
 
 export async function updateActivation(id: string, data: Partial<Activation>): Promise<void> {
-  await updateDoc(doc(db, 'activations', id), data);
+  await updateDoc(doc(db, 'activations', id), stripUndefined(data as Record<string, unknown>));
 }
 
 export async function deleteActivation(id: string): Promise<void> {

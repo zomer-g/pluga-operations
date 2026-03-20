@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { ShampafEntry, ShampafVacation } from '@/db/schema';
-import { generateId, dateRangesOverlap } from '@/lib/utils';
+import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
 import { useCacheEnabled } from '@/stores/useAppStore';
 
 // ===== Queries =====
@@ -160,12 +160,12 @@ export async function addShampafEntry(data: {
     orderNumber: data.orderNumber,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'shampafEntries', id), entry);
+  await setDoc(doc(db, 'shampafEntries', id), stripUndefined(entry as unknown as Record<string, unknown>));
   return id;
 }
 
 export async function updateShampafEntry(id: string, data: Partial<ShampafEntry>): Promise<void> {
-  await updateDoc(doc(db, 'shampafEntries', id), data);
+  await updateDoc(doc(db, 'shampafEntries', id), stripUndefined(data as Record<string, unknown>));
 }
 
 export async function deleteShampafEntry(id: string): Promise<void> {
@@ -201,12 +201,12 @@ export async function addShampafVacation(data: {
     reason: data.reason,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'shampafVacations', id), vacation);
+  await setDoc(doc(db, 'shampafVacations', id), stripUndefined(vacation as unknown as Record<string, unknown>));
   return id;
 }
 
 export async function updateShampafVacation(id: string, data: Partial<ShampafVacation>): Promise<void> {
-  await updateDoc(doc(db, 'shampafVacations', id), data);
+  await updateDoc(doc(db, 'shampafVacations', id), stripUndefined(data as Record<string, unknown>));
 }
 
 export async function deleteShampafVacation(id: string): Promise<void> {

@@ -49,6 +49,13 @@ export function dateRangesOverlap(
   return aStart < bEnd && bStart < aEnd;
 }
 
+/** Strip undefined values from an object — Firestore rejects them */
+export function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  ) as T;
+}
+
 export function formatDateTimeShort(isoString: string): string {
   const d = new Date(isoString);
   return d.toLocaleDateString('he-IL') + ' ' + d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });

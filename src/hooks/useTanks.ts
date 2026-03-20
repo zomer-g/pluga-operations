@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Tank, TankCrewAssignment, CrewRole } from '@/db/schema';
-import { generateId } from '@/lib/utils';
+import { generateId, stripUndefined } from '@/lib/utils';
 import type { TankFormData, CrewAssignFormData } from '@/lib/validators';
 import { useCacheEnabled } from '@/stores/useAppStore';
 
@@ -132,12 +132,12 @@ export async function addTank(data: TankFormData): Promise<string> {
     status: data.status as Tank['status'],
     notes: data.notes || undefined,
   };
-  await setDoc(doc(db, 'tanks', id), tank);
+  await setDoc(doc(db, 'tanks', id), stripUndefined(tank as unknown as Record<string, unknown>));
   return id;
 }
 
 export async function updateTank(id: string, data: TankFormData): Promise<void> {
-  await updateDoc(doc(db, 'tanks', id), { ...data, platoonId: data.platoonId || undefined, notes: data.notes || undefined });
+  await updateDoc(doc(db, 'tanks', id), stripUndefined({ ...data, platoonId: data.platoonId || undefined, notes: data.notes || undefined } as Record<string, unknown>));
 }
 
 export async function deleteTank(id: string): Promise<void> {
@@ -189,7 +189,7 @@ export async function assignCrew(
     role: data.role as CrewRole,
     startDate: data.startDate,
   };
-  batch.set(doc(db, 'tankCrewAssignments', id), assignment);
+  batch.set(doc(db, 'tankCrewAssignments', id), stripUndefined(assignment as unknown as Record<string, unknown>));
 
   await batch.commit();
   return id;

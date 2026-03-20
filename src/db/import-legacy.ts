@@ -1,7 +1,7 @@
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Soldier, Tank, Platoon, Assignment, ShampafEntry, CrewRole, AssignmentType } from './schema';
-import { generateId } from '@/lib/utils';
+import { generateId, stripUndefined } from '@/lib/utils';
 
 const ROLE_MAP: Record<string, CrewRole | undefined> = {
   'מפקד': 'commander',
@@ -147,7 +147,7 @@ export async function importLegacyData(csvData: {
       const batch = writeBatch(db);
       for (const item of items.slice(i, i + 500)) {
         const id = item['id'] as string;
-        batch.set(doc(db, collectionName, id), item);
+        batch.set(doc(db, collectionName, id), stripUndefined(item));
       }
       await batch.commit();
     }

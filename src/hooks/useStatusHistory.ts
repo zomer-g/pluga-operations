@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, doc, deleteDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { StatusEntry, SoldierStatus } from '@/db/schema';
-import { generateId } from '@/lib/utils';
+import { generateId, stripUndefined } from '@/lib/utils';
 import type { StatusEntryFormData } from '@/lib/validators';
 import { useCacheEnabled } from '@/stores/useAppStore';
 
@@ -138,14 +138,14 @@ export async function addStatusEntry(
     notes: data.notes || undefined,
     orderNumber: data.orderNumber || undefined,
   };
-  batch.set(doc(db, 'statusEntries', id), statusEntry);
+  batch.set(doc(db, 'statusEntries', id), stripUndefined(statusEntry as unknown as Record<string, unknown>));
 
   await batch.commit();
   return id;
 }
 
 export async function updateStatusEntry(id: string, data: Partial<StatusEntry>): Promise<void> {
-  await updateDoc(doc(db, 'statusEntries', id), data);
+  await updateDoc(doc(db, 'statusEntries', id), stripUndefined(data as Record<string, unknown>));
 }
 
 export async function deleteStatusEntry(id: string): Promise<void> {
