@@ -52,12 +52,12 @@ export async function addActivation(data: {
 }): Promise<string> {
   const id = generateId();
   const activation: Activation = { id, ...data };
-  await setDoc(doc(db, 'activations', id), stripUndefined(activation as unknown as Record<string, unknown>));
+  await setDoc(doc(db, 'activations', id), stripUndefined(activation as unknown as any));
   return id;
 }
 
 export async function updateActivation(id: string, data: Partial<Activation>): Promise<void> {
-  await updateDoc(doc(db, 'activations', id), stripUndefined(data as Record<string, unknown>));
+  await updateDoc(doc(db, 'activations', id), stripUndefined(data as any));
 }
 
 export async function deleteActivation(id: string): Promise<void> {

@@ -168,13 +168,13 @@ export async function addAssignment(data: {
     endDateTime: data.endDateTime,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'assignments', id), stripUndefined(assignment as unknown as Record<string, unknown>));
+  await setDoc(doc(db, 'assignments', id), stripUndefined(assignment as unknown as any));
 
   return { id, warnings };
 }
 
 export async function updateAssignment(id: string, data: Partial<Assignment>): Promise<void> {
-  await updateDoc(doc(db, 'assignments', id), stripUndefined(data as Record<string, unknown>));
+  await updateDoc(doc(db, 'assignments', id), stripUndefined(data as any));
 }
 
 export async function deleteAssignment(id: string): Promise<void> {

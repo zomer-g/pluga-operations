@@ -98,7 +98,7 @@ export async function assignEquipment(
     condition: data.condition as EquipmentAssignment['condition'],
     notes: data.notes || undefined,
   };
-  await setDoc(doc(db, 'equipmentAssignments', id), stripUndefined(assignment as unknown as Record<string, unknown>));
+  await setDoc(doc(db, 'equipmentAssignments', id), stripUndefined(assignment as unknown as any));
   return id;
 }
 
@@ -111,7 +111,7 @@ export async function returnEquipment(
     signedInDate: todayString(),
     condition: condition as EquipmentAssignment['condition'],
     notes,
-  } as Record<string, unknown>));
+  } as any));
 }
 
 export async function deleteEquipmentType(id: string): Promise<void> {

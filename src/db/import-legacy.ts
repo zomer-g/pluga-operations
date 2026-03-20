@@ -1,6 +1,6 @@
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Soldier, Tank, Platoon, Assignment, ShampafEntry, CrewRole, AssignmentType } from './schema';
+import type { Soldier, Tank, Platoon, Assignment, ShampafEntry, CrewRole } from './schema';
 import { generateId, stripUndefined } from '@/lib/utils';
 
 const ROLE_MAP: Record<string, CrewRole | undefined> = {

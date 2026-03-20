@@ -138,14 +138,14 @@ export async function addStatusEntry(
     notes: data.notes || undefined,
     orderNumber: data.orderNumber || undefined,
   };
-  batch.set(doc(db, 'statusEntries', id), stripUndefined(statusEntry as unknown as Record<string, unknown>));
+  batch.set(doc(db, 'statusEntries', id), stripUndefined(statusEntry as unknown as any));
 
   await batch.commit();
   return id;
 }
 
 export async function updateStatusEntry(id: string, data: Partial<StatusEntry>): Promise<void> {
-  await updateDoc(doc(db, 'statusEntries', id), stripUndefined(data as Record<string, unknown>));
+  await updateDoc(doc(db, 'statusEntries', id), stripUndefined(data as any));
 }
 
 export async function deleteStatusEntry(id: string): Promise<void> {

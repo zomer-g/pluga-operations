@@ -50,10 +50,11 @@ export function dateRangesOverlap(
 }
 
 /** Strip undefined values from an object — Firestore rejects them */
-export function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function stripUndefined(obj: Record<string, any>): Record<string, any> {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined)
-  ) as T;
+  );
 }
 
 export function formatDateTimeShort(isoString: string): string {

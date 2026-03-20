@@ -115,12 +115,12 @@ export async function addSoldier(data: SoldierFormData): Promise<string> {
     createdAt: now,
     updatedAt: now,
   };
-  await setDoc(doc(db, 'soldiers', id), stripUndefined(soldier as unknown as Record<string, unknown>));
+  await setDoc(doc(db, 'soldiers', id), stripUndefined(soldier as unknown as any));
   return id;
 }
 
 export async function updateSoldier(id: string, data: SoldierFormData): Promise<void> {
-  await updateDoc(doc(db, 'soldiers', id), stripUndefined({ ...data, email: data.email || undefined, updatedAt: new Date().toISOString() } as Record<string, unknown>));
+  await updateDoc(doc(db, 'soldiers', id), stripUndefined({ ...data, email: data.email || undefined, updatedAt: new Date().toISOString() } as any));
 }
 
 export async function deleteSoldier(id: string): Promise<void> {

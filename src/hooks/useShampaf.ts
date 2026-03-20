@@ -160,12 +160,12 @@ export async function addShampafEntry(data: {
     orderNumber: data.orderNumber,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'shampafEntries', id), stripUndefined(entry as unknown as Record<string, unknown>));
+  await setDoc(doc(db, 'shampafEntries', id), stripUndefined(entry as unknown as any));
   return id;
 }
 
 export async function updateShampafEntry(id: string, data: Partial<ShampafEntry>): Promise<void> {
-  await updateDoc(doc(db, 'shampafEntries', id), stripUndefined(data as Record<string, unknown>));
+  await updateDoc(doc(db, 'shampafEntries', id), stripUndefined(data as any));
 }
 
 export async function deleteShampafEntry(id: string): Promise<void> {
@@ -201,12 +201,12 @@ export async function addShampafVacation(data: {
     reason: data.reason,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'shampafVacations', id), stripUndefined(vacation as unknown as Record<string, unknown>));
+  await setDoc(doc(db, 'shampafVacations', id), stripUndefined(vacation as unknown as any));
   return id;
 }
 
 export async function updateShampafVacation(id: string, data: Partial<ShampafVacation>): Promise<void> {
-  await updateDoc(doc(db, 'shampafVacations', id), stripUndefined(data as Record<string, unknown>));
+  await updateDoc(doc(db, 'shampafVacations', id), stripUndefined(data as any));
 }
 
 export async function deleteShampafVacation(id: string): Promise<void> {

@@ -132,12 +132,12 @@ export async function addTank(data: TankFormData): Promise<string> {
     status: data.status as Tank['status'],
     notes: data.notes || undefined,
   };
-  await setDoc(doc(db, 'tanks', id), stripUndefined(tank as unknown as Record<string, unknown>));
+  await setDoc(doc(db, 'tanks', id), stripUndefined(tank as unknown as any));
   return id;
 }
 
 export async function updateTank(id: string, data: TankFormData): Promise<void> {
-  await updateDoc(doc(db, 'tanks', id), stripUndefined({ ...data, platoonId: data.platoonId || undefined, notes: data.notes || undefined } as Record<string, unknown>));
+  await updateDoc(doc(db, 'tanks', id), stripUndefined({ ...data, platoonId: data.platoonId || undefined, notes: data.notes || undefined } as any));
 }
 
 export async function deleteTank(id: string): Promise<void> {
@@ -189,7 +189,7 @@ export async function assignCrew(
     role: data.role as CrewRole,
     startDate: data.startDate,
   };
-  batch.set(doc(db, 'tankCrewAssignments', id), stripUndefined(assignment as unknown as Record<string, unknown>));
+  batch.set(doc(db, 'tankCrewAssignments', id), stripUndefined(assignment as unknown as any));
 
   await batch.commit();
   return id;
