@@ -74,12 +74,12 @@ export async function addDonation(data: Omit<Donation, 'id' | 'createdAt'>) {
     ...data,
     id,
     createdAt: new Date().toISOString(),
-  }) as Record<string, unknown>);
+  }) as any);
   return id;
 }
 
 export async function updateDonation(id: string, data: Partial<Donation>) {
-  await updateDoc(doc(db, 'donations', id), stripUndefined(data) as Record<string, unknown>);
+  await updateDoc(doc(db, 'donations', id), stripUndefined(data) as any);
 }
 
 export async function deleteDonation(id: string) {

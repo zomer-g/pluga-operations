@@ -57,7 +57,7 @@ export async function addRoutineTemplate(data: {
     id,
     createdAt: now,
     updatedAt: now,
-  }) as Record<string, unknown>);
+  }) as any);
   return id;
 }
 
@@ -65,7 +65,7 @@ export async function updateRoutineTemplate(id: string, data: Partial<RoutineTem
   await updateDoc(doc(db, 'routineTemplates', id), stripUndefined({
     ...data,
     updatedAt: new Date().toISOString(),
-  }) as Record<string, unknown>);
+  }) as any);
 }
 
 export async function deleteRoutineTemplate(id: string) {

@@ -31,13 +31,17 @@ export function TaskCard({ assignment, soldier, tank, onComplete, onReassign }: 
   const hoursUntil = Math.round((start.getTime() - now.getTime()) / (1000 * 60 * 60));
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
+    const touch = e.touches[0];
+    if (!touch) return;
+    startX.current = touch.clientX;
     isDragging.current = true;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging.current) return;
-    const diff = e.touches[0].clientX - startX.current;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const diff = touch.clientX - startX.current;
     // Limit swipe distance
     setSwipeX(Math.max(-120, Math.min(120, diff)));
   };

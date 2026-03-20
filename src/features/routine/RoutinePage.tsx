@@ -249,7 +249,7 @@ function TemplateForm({
 
   const updateSlot = (index: number, field: keyof RoutineCrewSlot, value: string) => {
     const next = [...slots];
-    next[index] = { ...next[index], [field]: value };
+    next[index] = { ...next[index], [field]: value } as RoutineCrewSlot;
     setSlots(next);
   };
 

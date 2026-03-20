@@ -11,7 +11,10 @@
       "Bash(npx tsc:*)",
       "Bash(npx vite:*)",
       "Bash(gh auth:*)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(find '/c/Users/zomer/CLAUDE CODE/pluga operations' -maxdepth 2 -name tailwind* -o -name postcss*)",
+      "Bash(npm run:*)"
     ]
   }
 }

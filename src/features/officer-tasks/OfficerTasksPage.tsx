@@ -65,9 +65,9 @@ export function OfficerTasksPage() {
   const grouped = useMemo(() => {
     const groups: Record<string, Assignment[]> = {};
     for (const a of futureAssignments) {
-      const dateKey = a.startDateTime.split('T')[0];
+      const dateKey = a.startDateTime.split('T')[0] ?? '';
       if (!groups[dateKey]) groups[dateKey] = [];
-      groups[dateKey].push(a);
+      groups[dateKey]!.push(a);
     }
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [futureAssignments]);

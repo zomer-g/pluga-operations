@@ -95,7 +95,7 @@ export async function addTrainingContent(data: Omit<TrainingContent, 'id' | 'cre
     id,
     createdAt: now,
     updatedAt: now,
-  }) as Record<string, unknown>);
+  }) as any);
   return id;
 }
 
@@ -103,7 +103,7 @@ export async function updateTrainingContent(id: string, data: Partial<TrainingCo
   await updateDoc(doc(db, 'trainingContent', id), stripUndefined({
     ...data,
     updatedAt: new Date().toISOString(),
-  }) as Record<string, unknown>);
+  }) as any);
 }
 
 export async function deleteTrainingContent(id: string) {
@@ -112,7 +112,7 @@ export async function deleteTrainingContent(id: string) {
 
 export async function addTrainingTag(name: string, color?: string) {
   const id = generateId();
-  await setDoc(doc(db, 'trainingTags', id), stripUndefined({ id, name, color }) as Record<string, unknown>);
+  await setDoc(doc(db, 'trainingTags', id), stripUndefined({ id, name, color }) as any);
   return id;
 }
 

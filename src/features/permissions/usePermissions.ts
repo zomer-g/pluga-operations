@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   collection,
   doc,
@@ -7,8 +7,6 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
-  query,
-  where,
 } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -119,12 +117,12 @@ export function useIsAdmin(): boolean | undefined {
 
 export async function addPermissionGroup(data: Omit<PermissionGroup, 'id'>) {
   const id = generateId();
-  await setDoc(doc(db, 'permissionGroups', id), stripUndefined({ ...data, id }) as Record<string, unknown>);
+  await setDoc(doc(db, 'permissionGroups', id), stripUndefined({ ...data, id }) as any);
   return id;
 }
 
 export async function updatePermissionGroup(id: string, data: Partial<PermissionGroup>) {
-  await updateDoc(doc(db, 'permissionGroups', id), stripUndefined(data) as Record<string, unknown>);
+  await updateDoc(doc(db, 'permissionGroups', id), stripUndefined(data) as any);
 }
 
 export async function deletePermissionGroup(id: string) {
@@ -132,7 +130,7 @@ export async function deletePermissionGroup(id: string) {
 }
 
 export async function setUserPermission(userId: string, data: Omit<UserPermission, 'id'>) {
-  await setDoc(doc(db, 'userPermissions', userId), stripUndefined({ ...data, id: userId }) as Record<string, unknown>);
+  await setDoc(doc(db, 'userPermissions', userId), stripUndefined({ ...data, id: userId }) as any);
 }
 
 export async function removeUserPermission(userId: string) {
@@ -192,11 +190,11 @@ export async function ensureUserPermission(user: { sub: string; email: string; n
     if (usersSnap.empty) {
       // First user but groups already exist — find admin group or first group
       const adminGroup = groupsSnap.docs.find(d => d.data().name === 'מנהל מערכת');
-      groupId = adminGroup?.id ?? groupsSnap.docs[0].id;
+      groupId = adminGroup?.id ?? groupsSnap.docs[0]?.id ?? '';
     } else {
       // Not first user — find default group
       const defaultGroup = groupsSnap.docs.find(d => d.data().isDefault === true);
-      groupId = defaultGroup?.id ?? groupsSnap.docs[0].id;
+      groupId = defaultGroup?.id ?? groupsSnap.docs[0]?.id ?? '';
     }
   }
 
