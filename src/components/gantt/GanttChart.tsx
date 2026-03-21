@@ -18,6 +18,7 @@ export interface GanttRow {
   label: string;
   sublabel?: string;
   bars: GanttBar[];
+  isGroupHeader?: boolean;
 }
 
 interface GanttChartProps {
@@ -138,48 +139,61 @@ export function GanttChart({
 
               {/* Rows */}
               <div className="space-y-1">
-                {rows.map((row) => (
-                  <div key={row.id} className="flex items-center gap-3 min-h-[32px]">
-                    {/* Label on right side (RTL) */}
-                    <div className="w-40 shrink-0 text-sm truncate">
-                      <div className="font-medium truncate">{row.label}</div>
-                      {row.sublabel && (
-                        <div className="text-xs text-muted-foreground truncate">
-                          {row.sublabel}
+                {rows.map((row) => {
+                  // Group header row
+                  if (row.isGroupHeader) {
+                    return (
+                      <div key={row.id} className="flex items-center gap-3 min-h-[28px] mt-3 first:mt-0">
+                        <div className="w-full text-xs font-bold text-muted-foreground border-b pb-1">
+                          {row.label}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    );
+                  }
 
-                    {/* Timeline area */}
-                    <div className="flex-1 relative h-6 bg-card rounded border">
-                      {/* Today line */}
-                      {showToday && (
-                        <div
-                          className="absolute top-0 bottom-0 w-px bg-red-500 z-10"
-                          style={{ right: `${todayPct}%` }}
-                        />
-                      )}
+                  return (
+                    <div key={row.id} className="flex items-center gap-3 min-h-[32px]">
+                      {/* Label on right side (RTL) */}
+                      <div className="w-40 shrink-0 text-sm truncate">
+                        <div className="font-medium truncate">{row.label}</div>
+                        {row.sublabel && (
+                          <div className="text-xs text-muted-foreground truncate">
+                            {row.sublabel}
+                          </div>
+                        )}
+                      </div>
 
-                      {/* Bars */}
-                      {row.bars.map((bar) => {
-                        const style = getBarStyle(bar);
-                        if (!style) return null;
-                        return (
+                      {/* Timeline area */}
+                      <div className="flex-1 relative h-6 bg-card rounded border">
+                        {/* Today line */}
+                        {showToday && (
                           <div
-                            key={bar.id}
-                            className={cn(
-                              'absolute top-0.5 bottom-0.5 rounded-sm opacity-80',
-                              bar.color,
-                              bar.isWarning && 'border-2 border-dashed border-red-500'
-                            )}
-                            style={style}
-                            title={bar.tooltip}
+                            className="absolute top-0 bottom-0 w-px bg-red-500 z-10"
+                            style={{ right: `${todayPct}%` }}
                           />
-                        );
-                      })}
+                        )}
+
+                        {/* Bars */}
+                        {row.bars.map((bar) => {
+                          const style = getBarStyle(bar);
+                          if (!style) return null;
+                          return (
+                            <div
+                              key={bar.id}
+                              className={cn(
+                                'absolute top-0.5 bottom-0.5 rounded-sm opacity-80',
+                                bar.color,
+                                bar.isWarning && 'border-2 border-dashed border-red-500'
+                              )}
+                              style={style}
+                              title={bar.tooltip}
+                            />
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : (

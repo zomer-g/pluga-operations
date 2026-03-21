@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
-import type { Tank, TankCrewAssignment, CrewRole } from '@/db/schema';
+import type { Tank, TankCrewAssignment, CrewRole, Department } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
 import type { TankFormData, CrewAssignFormData } from '@/lib/validators';
 
@@ -118,6 +118,7 @@ export async function addTank(data: TankFormData): Promise<string> {
     designation: data.designation,
     type: data.type,
     platoonId: data.platoonId || undefined,
+    departmentId: data.departmentId || undefined,
     status: data.status as Tank['status'],
     notes: data.notes || undefined,
   };
@@ -212,4 +213,42 @@ export async function addPlatoon(name: string, number: number): Promise<string> 
 
 export async function deletePlatoon(id: string): Promise<void> {
   await deleteDoc(doc(db, 'platoons', id));
+}
+
+// ===== Departments (מחלקות) =====
+
+export function useDepartments() {
+  const [departments, setDepartments] = useState<Department[] | undefined>();
+
+  useEffect(() => {
+    const q = query(collection(db, 'departments'), orderBy('order'));
+    const unsub = onSnapshot(q, (snap) => {
+      setDepartments(snap.docs.map(d => ({ ...d.data(), id: d.id } as Department)));
+    });
+    return unsub;
+  }, []);
+
+  return departments;
+}
+
+export async function addDepartment(name: string, order: number = 0): Promise<string> {
+  const id = generateId();
+  await setDoc(doc(db, 'departments', id), { id, name, order });
+  return id;
+}
+
+export async function updateDepartment(id: string, data: { name?: string; order?: number }): Promise<void> {
+  await updateDoc(doc(db, 'departments', id), stripUndefined(data as any));
+}
+
+export async function deleteDepartment(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'departments', id));
+}
+
+export async function setTankDepartment(tankId: string, departmentId: string | undefined): Promise<void> {
+  if (departmentId) {
+    await updateDoc(doc(db, 'tanks', tankId), { departmentId });
+  } else {
+    await updateDoc(doc(db, 'tanks', tankId), { departmentId: '' });
+  }
 }

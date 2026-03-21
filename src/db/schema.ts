@@ -103,12 +103,19 @@ export interface StatusEntry {
 
 export type VehicleCategory = 'tank' | 'standard';
 
+export interface Department {
+  id: string;
+  name: string;
+  order: number;
+}
+
 export interface Tank {
   id: string;
   designation: string;
   type: string;
   vehicleCategory?: VehicleCategory;
   platoonId?: string;
+  departmentId?: string;
   status: TankStatus;
   notes?: string;
 }

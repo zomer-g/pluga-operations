@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Pencil, Trash2, Plus, Save, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConflictBadge } from '@/components/assignment/ConflictBadge';
@@ -14,14 +14,16 @@ import {
   deleteAssignment,
 } from '@/hooks/useAssignment';
 import type { ConflictType } from '@/hooks/useAssignment';
-import { CREW_ROLES, getCrewRoleLabel } from '@/lib/constants';
-import type { Assignment, Soldier, Tank, CrewRole, AssignmentType } from '@/db/schema';
+import { CREW_ROLES, getCrewRoleLabel, ROLE_DISPLAY_ORDER } from '@/lib/constants';
+import type { Assignment, Soldier, Tank, CrewRole, AssignmentType, Department } from '@/db/schema';
 
 interface AssignmentTableProps {
   assignments: Assignment[];
   soldiers: Soldier[];
   tanks: Tank[];
   conflicts: Map<string, ConflictType[]>;
+  groupBy: 'vehicle' | 'soldier';
+  departments: Department[];
 }
 
 interface EditingData {
@@ -51,15 +53,91 @@ function getRolesForSoldier(
   soldiers: Soldier[]
 ): { value: string; label: string }[] {
   const soldier = soldiers.find((s) => s.id === soldierId);
-  // Commanders can fill all roles
   if (!soldier?.trainedRole || soldier.trainedRole === 'commander') {
     return CREW_ROLES.map((r) => ({ value: r.value, label: r.label }));
   }
-  // Others can only fill their trained role
   return CREW_ROLES.filter((r) => r.value === soldier.trainedRole).map((r) => ({
     value: r.value,
     label: r.label,
   }));
+}
+
+interface GroupedSection {
+  id: string;
+  label: string;
+  isHeader?: boolean;
+  assignments: Assignment[];
+}
+
+function groupAssignments(
+  assignments: Assignment[],
+  groupBy: 'vehicle' | 'soldier',
+  tanks: Tank[],
+  soldiers: Soldier[],
+  departments: Department[]
+): GroupedSection[] {
+  const sections: GroupedSection[] = [];
+
+  if (groupBy === 'soldier') {
+    const soldierIds = [...new Set(assignments.map(a => a.soldierId))];
+    for (const sid of soldierIds) {
+      const soldier = soldiers.find(s => s.id === sid);
+      if (!soldier) continue;
+      sections.push({
+        id: sid,
+        label: `${soldier.firstName} ${soldier.lastName}`,
+        assignments: assignments.filter(a => a.soldierId === sid),
+      });
+    }
+    return sections;
+  }
+
+  // Group by vehicle under department
+  const deptMap = new Map(departments.map(d => [d.id, d.name]));
+  const tanksByDept = new Map<string, Tank[]>();
+
+  for (const tank of tanks) {
+    const key = tank.departmentId || '__none__';
+    if (!tanksByDept.has(key)) tanksByDept.set(key, []);
+    tanksByDept.get(key)!.push(tank);
+  }
+
+  const orderedKeys: string[] = [];
+  for (const dept of departments) {
+    if (tanksByDept.has(dept.id)) orderedKeys.push(dept.id);
+  }
+  if (tanksByDept.has('__none__')) orderedKeys.push('__none__');
+
+  for (const key of orderedKeys) {
+    const deptTanks = tanksByDept.get(key) ?? [];
+    if (key !== '__none__' && deptMap.has(key)) {
+      sections.push({ id: `dept_${key}`, label: deptMap.get(key)!, isHeader: true, assignments: [] });
+    } else if (key === '__none__' && orderedKeys.length > 1) {
+      sections.push({ id: 'dept_none', label: 'ללא מחלקה', isHeader: true, assignments: [] });
+    }
+
+    for (const tank of deptTanks) {
+      const tankAs = assignments.filter(a => a.tankId === tank.id);
+      // Sort by role display order
+      const sorted = [...tankAs].sort((a, b) => {
+        const orderA = a.role ? ROLE_DISPLAY_ORDER.indexOf(a.role) : ROLE_DISPLAY_ORDER.length;
+        const orderB = b.role ? ROLE_DISPLAY_ORDER.indexOf(b.role) : ROLE_DISPLAY_ORDER.length;
+        return orderA - orderB;
+      });
+      if (sorted.length > 0) {
+        sections.push({ id: tank.id, label: tank.designation, assignments: sorted });
+      }
+    }
+  }
+
+  // General missions without tank
+  const noTank = assignments.filter(a => !a.tankId);
+  if (noTank.length > 0) {
+    sections.push({ id: 'general', label: 'משימות כלליות', isHeader: true, assignments: [] });
+    sections.push({ id: 'general_items', label: '', assignments: noTank });
+  }
+
+  return sections;
 }
 
 export function AssignmentTable({
@@ -67,11 +145,18 @@ export function AssignmentTable({
   soldiers,
   tanks,
   conflicts,
+  groupBy,
+  departments,
 }: AssignmentTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingData, setEditingData] = useState<EditingData | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
+
+  const sections = useMemo(
+    () => groupAssignments(assignments, groupBy, tanks, soldiers, departments),
+    [assignments, groupBy, tanks, soldiers, departments]
+  );
 
   const startAdd = () => {
     const tempId = `__new_${generateId()}`;
@@ -135,7 +220,6 @@ export function AssignmentTable({
       });
       if (result.warnings.length > 0) {
         setWarnings(result.warnings);
-        // Still created, just show warnings briefly
         setTimeout(() => setWarnings([]), 5000);
       }
     } else if (editingId) {
@@ -170,7 +254,6 @@ export function AssignmentTable({
     if (!editingData) return null;
     return (
       <tr key={key} className="border-b bg-muted/30">
-        {/* Soldier */}
         <td className="py-1 px-2">
           {isNew ? (
             <select
@@ -193,8 +276,6 @@ export function AssignmentTable({
             </span>
           )}
         </td>
-
-        {/* Type */}
         <td className="py-1 px-2">
           <select
             value={editingData.type}
@@ -213,8 +294,6 @@ export function AssignmentTable({
             <option value="general_mission">משימה כללית</option>
           </select>
         </td>
-
-        {/* Tank/Mission */}
         <td className="py-1 px-2">
           {editingData.type === 'tank_role' ? (
             <select
@@ -243,8 +322,6 @@ export function AssignmentTable({
             />
           )}
         </td>
-
-        {/* Role */}
         <td className="py-1 px-2">
           {editingData.type === 'tank_role' ? (
             <select
@@ -265,8 +342,6 @@ export function AssignmentTable({
             <span className="text-xs text-muted-foreground leading-[44px]">-</span>
           )}
         </td>
-
-        {/* Start */}
         <td className="py-1 px-2">
           <input
             type="datetime-local"
@@ -277,8 +352,6 @@ export function AssignmentTable({
             className="h-11 w-full rounded-md border border-input bg-transparent px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </td>
-
-        {/* End */}
         <td className="py-1 px-2">
           <input
             type="datetime-local"
@@ -289,11 +362,7 @@ export function AssignmentTable({
             className="h-11 w-full rounded-md border border-input bg-transparent px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </td>
-
-        {/* Status */}
         <td className="py-1 px-2 text-center">-</td>
-
-        {/* Actions */}
         <td className="py-1 px-2">
           <div className="flex gap-1">
             <Button variant="ghost" size="icon" onClick={saveAssignment} title="שמור" aria-label="שמור">
@@ -307,6 +376,81 @@ export function AssignmentTable({
       </tr>
     );
   };
+
+  const renderAssignmentRow = (a: Assignment) => {
+    const isEditing = editingId === a.id && !isNew;
+    if (isEditing) return renderEditRow(a.id);
+
+    const assignmentConflicts = conflicts.get(a.id);
+
+    return (
+      <tr key={a.id} className="border-b">
+        <td className="py-1 px-2 min-h-[44px]">
+          <span className="leading-[44px]">
+            {getSoldierName(a.soldierId, soldiers)}
+          </span>
+        </td>
+        <td className="py-1 px-2">
+          <span className="leading-[44px] text-xs">
+            {a.type === 'tank_role' ? 'שיבוץ לטנק' : 'משימה כללית'}
+          </span>
+        </td>
+        <td className="py-1 px-2">
+          <span className="leading-[44px]">
+            {a.type === 'tank_role'
+              ? getTankDesignation(a.tankId, tanks)
+              : a.missionName || '-'}
+          </span>
+        </td>
+        <td className="py-1 px-2">
+          <span className="leading-[44px]">
+            {a.type === 'tank_role'
+              ? a.role
+                ? getCrewRoleLabel(a.role)
+                : 'איש צוות 5'
+              : '-'}
+          </span>
+        </td>
+        <td className="py-1 px-2">
+          <span className="leading-[44px] text-xs">
+            {formatDateTimeShort(a.startDateTime)}
+          </span>
+        </td>
+        <td className="py-1 px-2">
+          <span className="leading-[44px] text-xs">
+            {formatDateTimeShort(a.endDateTime)}
+          </span>
+        </td>
+        <td className="py-1 px-2 text-center">
+          <ConflictBadge conflicts={assignmentConflicts} />
+        </td>
+        <td className="py-1 px-2">
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => startEdit(a)}
+              title="ערוך"
+              aria-label="ערוך"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleDelete(a.id)}
+              title="מחק"
+              aria-label="מחק"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  const totalAssignments = sections.reduce((sum, s) => sum + s.assignments.length, 0);
 
   return (
     <div className="space-y-3">
@@ -344,83 +488,32 @@ export function AssignmentTable({
             {/* New row at top */}
             {isNew && editingId && renderEditRow(editingId)}
 
-            {assignments.map((a) => {
-              const isEditing = editingId === a.id && !isNew;
-
-              if (isEditing) {
-                return renderEditRow(a.id);
+            {sections.map((section) => {
+              if (section.isHeader) {
+                return (
+                  <tr key={section.id} className="bg-muted/50">
+                    <td colSpan={8} className="py-2 px-2 text-xs font-bold text-muted-foreground">
+                      {section.label}
+                    </td>
+                  </tr>
+                );
               }
 
-              const assignmentConflicts = conflicts.get(a.id);
-
               return (
-                <tr key={a.id} className="border-b">
-                  <td className="py-1 px-2 min-h-[44px]">
-                    <span className="leading-[44px]">
-                      {getSoldierName(a.soldierId, soldiers)}
-                    </span>
-                  </td>
-                  <td className="py-1 px-2">
-                    <span className="leading-[44px] text-xs">
-                      {a.type === 'tank_role' ? 'שיבוץ לטנק' : 'משימה כללית'}
-                    </span>
-                  </td>
-                  <td className="py-1 px-2">
-                    <span className="leading-[44px]">
-                      {a.type === 'tank_role'
-                        ? getTankDesignation(a.tankId, tanks)
-                        : a.missionName || '-'}
-                    </span>
-                  </td>
-                  <td className="py-1 px-2">
-                    <span className="leading-[44px]">
-                      {a.type === 'tank_role'
-                        ? a.role
-                          ? getCrewRoleLabel(a.role)
-                          : 'איש צוות 5'
-                        : '-'}
-                    </span>
-                  </td>
-                  <td className="py-1 px-2">
-                    <span className="leading-[44px] text-xs">
-                      {formatDateTimeShort(a.startDateTime)}
-                    </span>
-                  </td>
-                  <td className="py-1 px-2">
-                    <span className="leading-[44px] text-xs">
-                      {formatDateTimeShort(a.endDateTime)}
-                    </span>
-                  </td>
-                  <td className="py-1 px-2 text-center">
-                    <ConflictBadge conflicts={assignmentConflicts} />
-                  </td>
-                  <td className="py-1 px-2">
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => startEdit(a)}
-                        title="ערוך"
-                        aria-label="ערוך"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(a.id)}
-                        title="מחק"
-                        aria-label="מחק"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
+                <>
+                  {section.label && (
+                    <tr key={`label_${section.id}`} className="bg-muted/20">
+                      <td colSpan={8} className="py-1.5 px-2 text-xs font-medium">
+                        {section.label}
+                      </td>
+                    </tr>
+                  )}
+                  {section.assignments.map(renderAssignmentRow)}
+                </>
               );
             })}
 
-            {assignments.length === 0 && !isNew && (
+            {totalAssignments === 0 && !isNew && (
               <tr>
                 <td colSpan={8} className="py-12 text-center text-muted-foreground">
                   <p>אין שיבוצים</p>

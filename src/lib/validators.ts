@@ -47,11 +47,19 @@ export const tankSchema = z.object({
   type: z.string().min(1, 'סוג רכב נדרש'),
   vehicleCategory: z.enum(['tank', 'standard']).optional(),
   platoonId: z.string().optional(),
+  departmentId: z.string().optional(),
   status: z.string().min(1, 'סטטוס נדרש'),
   notes: z.string().optional(),
 });
 
 export type TankFormData = z.infer<typeof tankSchema>;
+
+export const departmentSchema = z.object({
+  name: z.string().min(1, 'שם מחלקה נדרש'),
+  order: z.coerce.number().default(0),
+});
+
+export type DepartmentFormData = z.infer<typeof departmentSchema>;
 
 export const crewAssignSchema = z.object({
   soldierId: z.string().min(1, 'חייל נדרש'),

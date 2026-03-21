@@ -75,6 +75,9 @@ export const CREW_ROLES: { value: CrewRole; label: string; position: string }[] 
   { value: 'commander', label: 'מפקד', position: 'back-right' },
 ];
 
+/** Display order for roles inside a vehicle: מפקד, תותחן, טען, נהג */
+export const ROLE_DISPLAY_ORDER: CrewRole[] = ['commander', 'gunner', 'loader', 'driver'];
+
 export const VEHICLE_CATEGORIES: { value: VehicleCategory; label: string }[] = [
   { value: 'tank', label: 'טנק' },
   { value: 'standard', label: 'רכב רגיל' },

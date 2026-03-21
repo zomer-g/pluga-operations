@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CalendarClock, Plus, Truck } from 'lucide-react';
+import { CalendarClock, Plus, Truck, FolderPlus, Users, Car } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,12 +23,14 @@ import {
   addAssignment,
 } from '@/hooks/useAssignment';
 import { useSoldiers } from '@/hooks/useSoldiers';
-import { useTanks, addTank } from '@/hooks/useTanks';
+import { useTanks, addTank, useDepartments, addDepartment, deleteDepartment, setTankDepartment } from '@/hooks/useTanks';
 import { useActivations } from '@/hooks/useActivation';
 import { useAppStore } from '@/stores/useAppStore';
-import { ASSIGNMENT_COLORS, getCrewRoleLabel, VEHICLE_CATEGORIES } from '@/lib/constants';
+import { ASSIGNMENT_COLORS, getCrewRoleLabel, VEHICLE_CATEGORIES, ROLE_DISPLAY_ORDER } from '@/lib/constants';
 import { noonToday, noonTomorrow, dateRangesOverlap } from '@/lib/utils';
 import type { CrewRole, VehicleCategory } from '@/db/schema';
+
+type GroupBy = 'vehicle' | 'soldier';
 
 export function AssignmentPage() {
   const allAssignments = useAssignments();
@@ -36,6 +38,7 @@ export function AssignmentPage() {
   const tanks = useTanks();
   const conflicts = useAssignmentConflicts();
   const activations = useActivations();
+  const departments = useDepartments();
 
   // Global activation from store
   const selectedActivationId = useAppStore(s => s.selectedActivationId);
@@ -54,6 +57,9 @@ export function AssignmentPage() {
       )
     );
   }, [allAssignments, activeActivation]);
+
+  // Grouping state
+  const [groupBy, setGroupBy] = useState<GroupBy>('vehicle');
 
   // Date filter for tank view
   const [viewDateTime, setViewDateTime] = useState(noonToday());
@@ -84,6 +90,11 @@ export function AssignmentPage() {
   const [showVehicleDialog, setShowVehicleDialog] = useState(false);
   const [vehicleName, setVehicleName] = useState('');
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>('standard');
+  const [vehicleDepartmentId, setVehicleDepartmentId] = useState('');
+
+  // Department dialog
+  const [showDeptDialog, setShowDeptDialog] = useState(false);
+  const [deptName, setDeptName] = useState('');
 
   // Filter assignments active at viewDateTime for tank view
   const activeAssignments = useMemo(() => {
@@ -92,51 +103,151 @@ export function AssignmentPage() {
     return assignments.filter((a) => a.startDateTime <= dt && a.endDateTime >= dt);
   }, [assignments, viewDateTime]);
 
-  // Build Gantt rows
+  // Build Gantt rows — grouped by vehicle or soldier
   const ganttRows = useMemo<GanttRow[]>(() => {
-    if (!assignments || !soldiers || !conflicts) return [];
+    if (!assignments || !soldiers || !tanks || !conflicts) return [];
 
-    const soldierIds = [...new Set(assignments.map((a) => a.soldierId))];
-
-    return soldierIds
-      .map((soldierId) => {
-        const soldier = soldiers.find((s) => s.id === soldierId);
-        if (!soldier) return null;
-
-        const soldierAssignments = assignments.filter((a) => a.soldierId === soldierId);
-
-        const bars = soldierAssignments.map((a) => {
-          const assignmentConflicts = conflicts.get(a.id);
-          const color =
-            a.type === 'tank_role'
-              ? ASSIGNMENT_COLORS.tank_role
-              : ASSIGNMENT_COLORS.general_mission;
-
-          const label =
-            a.type === 'tank_role'
-              ? a.role
-                ? getCrewRoleLabel(a.role)
-                : 'איש צוות 5'
+    if (groupBy === 'soldier') {
+      const soldierIds = [...new Set(assignments.map((a) => a.soldierId))];
+      return soldierIds
+        .map((soldierId) => {
+          const soldier = soldiers.find((s) => s.id === soldierId);
+          if (!soldier) return null;
+          const soldierAssignments = assignments.filter((a) => a.soldierId === soldierId);
+          const bars = soldierAssignments.map((a) => {
+            const assignmentConflicts = conflicts.get(a.id);
+            const color = a.type === 'tank_role' ? ASSIGNMENT_COLORS.tank_role : ASSIGNMENT_COLORS.general_mission;
+            const label = a.type === 'tank_role'
+              ? a.role ? getCrewRoleLabel(a.role) : 'איש צוות 5'
               : a.missionName ?? 'משימה';
+            return {
+              id: a.id,
+              startDateTime: a.startDateTime,
+              endDateTime: a.endDateTime,
+              color,
+              tooltip: `${label}: ${new Date(a.startDateTime).toLocaleDateString('he-IL')} - ${new Date(a.endDateTime).toLocaleDateString('he-IL')}`,
+              isWarning: !!assignmentConflicts && assignmentConflicts.length > 0,
+            };
+          });
+          return { id: soldierId, label: `${soldier.firstName} ${soldier.lastName[0]}'`, bars };
+        })
+        .filter(Boolean) as GanttRow[];
+    }
 
-          return {
-            id: a.id,
-            startDateTime: a.startDateTime,
-            endDateTime: a.endDateTime,
-            color,
-            tooltip: `${label}: ${new Date(a.startDateTime).toLocaleDateString('he-IL')} - ${new Date(a.endDateTime).toLocaleDateString('he-IL')}`,
-            isWarning: !!assignmentConflicts && assignmentConflicts.length > 0,
-          };
-        });
+    // Group by vehicle (under departments)
+    const rows: GanttRow[] = [];
+    const deptList = departments ?? [];
+    const deptMap = new Map(deptList.map(d => [d.id, d.name]));
 
-        return {
-          id: soldierId,
-          label: `${soldier.firstName} ${soldier.lastName[0]}'`,
-          bars,
-        };
-      })
-      .filter(Boolean) as GanttRow[];
-  }, [assignments, soldiers, conflicts]);
+    // Group tanks by department
+    const tanksByDept = new Map<string, typeof tanks>();
+    for (const tank of tanks) {
+      const key = tank.departmentId || '__none__';
+      if (!tanksByDept.has(key)) tanksByDept.set(key, []);
+      tanksByDept.get(key)!.push(tank);
+    }
+
+    // Build sections: departments first (in order), then uncategorized
+    const orderedKeys: string[] = [];
+    for (const dept of deptList) {
+      if (tanksByDept.has(dept.id)) orderedKeys.push(dept.id);
+    }
+    if (tanksByDept.has('__none__')) orderedKeys.push('__none__');
+
+    for (const key of orderedKeys) {
+      const deptTanks = tanksByDept.get(key) ?? [];
+      // Add department header row
+      if (key !== '__none__' && deptMap.has(key)) {
+        rows.push({ id: `dept_${key}`, label: `📁 ${deptMap.get(key)!}`, bars: [], isGroupHeader: true });
+      } else if (key === '__none__' && orderedKeys.length > 1) {
+        rows.push({ id: 'dept_none', label: '📁 ללא מחלקה', bars: [], isGroupHeader: true });
+      }
+
+      for (const tank of deptTanks) {
+        const tankAssignments = assignments.filter(a => a.tankId === tank.id);
+        // Group assignments by role in display order
+        const roleAssignments = new Map<string, typeof assignments>();
+        for (const a of tankAssignments) {
+          const roleKey = a.role ?? 'fifth';
+          if (!roleAssignments.has(roleKey)) roleAssignments.set(roleKey, []);
+          roleAssignments.get(roleKey)!.push(a);
+        }
+
+        // Sort roles in display order
+        const roleOrder = [...ROLE_DISPLAY_ORDER, 'fifth' as const];
+        for (const role of roleOrder) {
+          const roleAs = roleAssignments.get(role);
+          if (!roleAs || roleAs.length === 0) continue;
+          const roleLabel = role === 'fifth' ? 'איש צוות 5' : getCrewRoleLabel(role as CrewRole);
+          const bars = roleAs.map(a => {
+            const assignmentConflicts = conflicts.get(a.id);
+            const soldier = soldiers.find(s => s.id === a.soldierId);
+            const soldierName = soldier ? `${soldier.firstName} ${soldier.lastName[0]}'` : '';
+            return {
+              id: a.id,
+              startDateTime: a.startDateTime,
+              endDateTime: a.endDateTime,
+              color: ASSIGNMENT_COLORS.tank_role,
+              tooltip: `${soldierName} - ${roleLabel}: ${new Date(a.startDateTime).toLocaleDateString('he-IL')} - ${new Date(a.endDateTime).toLocaleDateString('he-IL')}`,
+              isWarning: !!assignmentConflicts && assignmentConflicts.length > 0,
+            };
+          });
+          rows.push({
+            id: `${tank.id}_${role}`,
+            label: tank.designation,
+            sublabel: roleLabel,
+            bars,
+          });
+        }
+
+        // General missions assigned to this tank
+        const generalMissions = tankAssignments.filter(a => a.type === 'general_mission');
+        if (generalMissions.length > 0) {
+          const bars = generalMissions.map(a => {
+            const assignmentConflicts = conflicts.get(a.id);
+            return {
+              id: a.id,
+              startDateTime: a.startDateTime,
+              endDateTime: a.endDateTime,
+              color: ASSIGNMENT_COLORS.general_mission,
+              tooltip: `${a.missionName ?? 'משימה'}: ${new Date(a.startDateTime).toLocaleDateString('he-IL')} - ${new Date(a.endDateTime).toLocaleDateString('he-IL')}`,
+              isWarning: !!assignmentConflicts && assignmentConflicts.length > 0,
+            };
+          });
+          rows.push({ id: `${tank.id}_missions`, label: tank.designation, sublabel: 'משימות', bars });
+        }
+      }
+    }
+
+    // Assignments without a tank (general missions)
+    const noTankAssignments = assignments.filter(a => !a.tankId);
+    if (noTankAssignments.length > 0) {
+      // Group by soldier
+      const soldierIds = [...new Set(noTankAssignments.map(a => a.soldierId))];
+      if (soldierIds.length > 0) {
+        rows.push({ id: 'general_header', label: '📁 משימות כלליות', bars: [], isGroupHeader: true });
+        for (const sid of soldierIds) {
+          const soldier = soldiers.find(s => s.id === sid);
+          if (!soldier) continue;
+          const soldierAs = noTankAssignments.filter(a => a.soldierId === sid);
+          const bars = soldierAs.map(a => {
+            const assignmentConflicts = conflicts.get(a.id);
+            return {
+              id: a.id,
+              startDateTime: a.startDateTime,
+              endDateTime: a.endDateTime,
+              color: ASSIGNMENT_COLORS.general_mission,
+              tooltip: `${a.missionName ?? 'משימה'}: ${new Date(a.startDateTime).toLocaleDateString('he-IL')} - ${new Date(a.endDateTime).toLocaleDateString('he-IL')}`,
+              isWarning: !!assignmentConflicts && assignmentConflicts.length > 0,
+            };
+          });
+          rows.push({ id: `general_${sid}`, label: `${soldier.firstName} ${soldier.lastName[0]}'`, bars });
+        }
+      }
+    }
+
+    return rows;
+  }, [assignments, soldiers, tanks, conflicts, departments, groupBy]);
 
   // Handle assign from TankDiagram
   const openAssignDialog = (tankId: string, role: CrewRole | 'fifth') => {
@@ -179,18 +290,69 @@ export function AssignmentPage() {
       designation: vehicleName,
       type: vehicleCategory === 'tank' ? 'מרכבה סימן 4' : 'רכב רגיל',
       vehicleCategory,
+      departmentId: vehicleDepartmentId || undefined,
       status: 'operational',
     });
     setShowVehicleDialog(false);
     setVehicleName('');
     setVehicleCategory('standard');
+    setVehicleDepartmentId('');
+  };
+
+  const handleCreateDepartment = async () => {
+    if (!deptName) return;
+    await addDepartment(deptName, (departments?.length ?? 0) + 1);
+    setShowDeptDialog(false);
+    setDeptName('');
   };
 
   const isLoaded = assignments && soldiers && tanks && conflicts;
 
+  // Sort tanks by department then by designation, with role order enforcement
+  const sortedTanks = useMemo(() => {
+    if (!tanks) return [];
+    const deptOrder = new Map((departments ?? []).map((d, i) => [d.id, i]));
+    return [...tanks].sort((a, b) => {
+      const deptA = a.departmentId ? (deptOrder.get(a.departmentId) ?? 999) : 999;
+      const deptB = b.departmentId ? (deptOrder.get(b.departmentId) ?? 999) : 999;
+      if (deptA !== deptB) return deptA - deptB;
+      return a.designation.localeCompare(b.designation, 'he');
+    });
+  }, [tanks, departments]);
+
+  // Group sorted tanks by department for display
+  const tanksByDepartment = useMemo(() => {
+    const groups: { deptId: string; deptName: string; tanks: typeof sortedTanks }[] = [];
+    const deptMap = new Map((departments ?? []).map(d => [d.id, d.name]));
+    const seen = new Set<string>();
+
+    for (const tank of sortedTanks) {
+      const deptId = tank.departmentId || '__none__';
+      if (!seen.has(deptId)) {
+        seen.add(deptId);
+        groups.push({
+          deptId,
+          deptName: deptId === '__none__' ? '' : (deptMap.get(deptId) ?? ''),
+          tanks: [],
+        });
+      }
+      groups.find(g => g.deptId === deptId)!.tanks.push(tank);
+    }
+
+    return groups;
+  }, [sortedTanks, departments]);
+
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold">שיבוץ חיילים</h2>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-2xl font-bold">שיבוץ חיילים</h2>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setShowDeptDialog(true)}>
+            <FolderPlus className="h-4 w-4 ml-1" />
+            מחלקה חדשה
+          </Button>
+        </div>
+      </div>
 
       <Tabs defaultValue="table" dir="rtl">
         <TabsList>
@@ -201,31 +363,77 @@ export function AssignmentPage() {
 
         <TabsContent value="table">
           {isLoaded ? (
-            <AssignmentTable
-              assignments={assignments}
-              soldiers={soldiers}
-              tanks={tanks}
-              conflicts={conflicts}
-            />
+            <div className="space-y-3">
+              {/* Grouping toggle */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">קיבוץ לפי:</Label>
+                <div className="flex rounded-md border border-input overflow-hidden">
+                  <button
+                    onClick={() => setGroupBy('vehicle')}
+                    className={`px-3 py-1.5 text-xs flex items-center gap-1 transition-colors ${groupBy === 'vehicle' ? 'bg-primary text-primary-foreground' : 'bg-transparent hover:bg-muted'}`}
+                  >
+                    <Car className="h-3 w-3" />
+                    רכב
+                  </button>
+                  <button
+                    onClick={() => setGroupBy('soldier')}
+                    className={`px-3 py-1.5 text-xs flex items-center gap-1 transition-colors ${groupBy === 'soldier' ? 'bg-primary text-primary-foreground' : 'bg-transparent hover:bg-muted'}`}
+                  >
+                    <Users className="h-3 w-3" />
+                    חייל
+                  </button>
+                </div>
+              </div>
+
+              <AssignmentTable
+                assignments={assignments}
+                soldiers={soldiers}
+                tanks={tanks}
+                conflicts={conflicts}
+                groupBy={groupBy}
+                departments={departments ?? []}
+              />
+            </div>
           ) : (
             <LoadingPlaceholder />
           )}
         </TabsContent>
 
         <TabsContent value="gantt">
-          {/* Legend */}
-          <div className="flex flex-wrap gap-3 mb-3">
-            <div className="flex items-center gap-1">
-              <div className={`h-3 w-3 rounded-full ${ASSIGNMENT_COLORS.tank_role}`} />
-              <span className="text-xs">שיבוץ לטנק</span>
+          {/* Grouping toggle + Legend */}
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">קיבוץ לפי:</Label>
+              <div className="flex rounded-md border border-input overflow-hidden">
+                <button
+                  onClick={() => setGroupBy('vehicle')}
+                  className={`px-3 py-1.5 text-xs flex items-center gap-1 transition-colors ${groupBy === 'vehicle' ? 'bg-primary text-primary-foreground' : 'bg-transparent hover:bg-muted'}`}
+                >
+                  <Car className="h-3 w-3" />
+                  רכב
+                </button>
+                <button
+                  onClick={() => setGroupBy('soldier')}
+                  className={`px-3 py-1.5 text-xs flex items-center gap-1 transition-colors ${groupBy === 'soldier' ? 'bg-primary text-primary-foreground' : 'bg-transparent hover:bg-muted'}`}
+                >
+                  <Users className="h-3 w-3" />
+                  חייל
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <div className={`h-3 w-3 rounded-full ${ASSIGNMENT_COLORS.general_mission}`} />
-              <span className="text-xs">משימה כללית</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="h-3 w-3 rounded-full border-2 border-dashed border-red-500" />
-              <span className="text-xs">התנגשות שמ"פ</span>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-1">
+                <div className={`h-3 w-3 rounded-full ${ASSIGNMENT_COLORS.tank_role}`} />
+                <span className="text-xs">שיבוץ לטנק</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className={`h-3 w-3 rounded-full ${ASSIGNMENT_COLORS.general_mission}`} />
+                <span className="text-xs">משימה כללית</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="h-3 w-3 rounded-full border-2 border-dashed border-red-500" />
+                <span className="text-xs">התנגשות שמ"פ</span>
+              </div>
             </div>
           </div>
 
@@ -261,73 +469,127 @@ export function AssignmentPage() {
                 </Button>
               </div>
 
-              {/* Vehicle cards grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {tanks.map((tank) => {
-                  const tankAssignments = activeAssignments.filter(
-                    (a) => a.tankId === tank.id
-                  );
-                  const isStandard = tank.vehicleCategory === 'standard';
+              {/* Vehicle cards grouped by department */}
+              {tanksByDepartment.map((group) => (
+                <div key={group.deptId} className="space-y-3">
+                  {group.deptName && (
+                    <div className="flex items-center justify-between border-b pb-1">
+                      <h3 className="text-sm font-bold text-muted-foreground">{group.deptName}</h3>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs text-destructive h-6"
+                        onClick={() => {
+                          if (confirm(`למחוק את המחלקה "${group.deptName}"?`)) {
+                            deleteDepartment(group.deptId);
+                          }
+                        }}
+                      >
+                        מחק מחלקה
+                      </Button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {group.tanks.map((tank) => {
+                      const tankAssignments = activeAssignments.filter(
+                        (a) => a.tankId === tank.id
+                      );
+                      const isStandard = tank.vehicleCategory === 'standard';
 
-                  if (isStandard) {
-                    // Standard vehicle: simple member list
-                    return (
-                      <Card key={tank.id}>
-                        <CardContent className="p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-bold">{tank.designation}</span>
-                            <span className="text-xs text-muted-foreground bg-muted/30 px-2 py-0.5 rounded">רכב רגיל</span>
-                          </div>
-                          <div className="space-y-1">
-                            {tankAssignments.length === 0 && (
-                              <p className="text-xs text-muted-foreground text-center py-2">אין חיילים משובצים</p>
-                            )}
-                            {tankAssignments.map((a) => {
-                              const s = soldiers.find(s => s.id === a.soldierId);
-                              return (
-                                <div key={a.id} className="flex items-center justify-between text-xs border rounded px-2 py-1.5">
-                                  <span>{s ? `${s.firstName} ${s.lastName}` : '---'}</span>
-                                  <button
-                                    onClick={() => handleUnassign(a.id)}
-                                    className="text-destructive hover:text-destructive/80 text-xs"
+                      // Sort assignments by role display order
+                      const sortedAssignments = [...tankAssignments].sort((a, b) => {
+                        const orderA = a.role ? ROLE_DISPLAY_ORDER.indexOf(a.role) : ROLE_DISPLAY_ORDER.length;
+                        const orderB = b.role ? ROLE_DISPLAY_ORDER.indexOf(b.role) : ROLE_DISPLAY_ORDER.length;
+                        return orderA - orderB;
+                      });
+
+                      if (isStandard) {
+                        return (
+                          <Card key={tank.id}>
+                            <CardContent className="p-3 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold">{tank.designation}</span>
+                                <div className="flex items-center gap-1">
+                                  {/* Department selector */}
+                                  <select
+                                    value={tank.departmentId ?? ''}
+                                    onChange={(e) => setTankDepartment(tank.id, e.target.value || undefined)}
+                                    className="h-6 text-[10px] rounded border border-input bg-transparent px-1"
+                                    title="מחלקה"
                                   >
-                                    ✕
-                                  </button>
+                                    <option value="">ללא מחלקה</option>
+                                    {(departments ?? []).map(d => (
+                                      <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                  </select>
+                                  <span className="text-xs text-muted-foreground bg-muted/30 px-2 py-0.5 rounded">רכב רגיל</span>
                                 </div>
-                              );
-                            })}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="w-full text-xs h-8"
-                            onClick={() => openAssignDialog(tank.id, 'fifth')}
-                          >
-                            <Plus className="h-3 w-3 me-1" />
-                            הוסף חייל
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    );
-                  }
+                              </div>
+                              <div className="space-y-1">
+                                {sortedAssignments.length === 0 && (
+                                  <p className="text-xs text-muted-foreground text-center py-2">אין חיילים משובצים</p>
+                                )}
+                                {sortedAssignments.map((a) => {
+                                  const s = soldiers.find(s => s.id === a.soldierId);
+                                  return (
+                                    <div key={a.id} className="flex items-center justify-between text-xs border rounded px-2 py-1.5">
+                                      <span>{s ? `${s.firstName} ${s.lastName}` : '---'}</span>
+                                      <button
+                                        onClick={() => handleUnassign(a.id)}
+                                        className="text-destructive hover:text-destructive/80 text-xs"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full text-xs h-8"
+                                onClick={() => openAssignDialog(tank.id, 'fifth')}
+                              >
+                                <Plus className="h-3 w-3 me-1" />
+                                הוסף חייל
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        );
+                      }
 
-                  // Tank: standard 4-slot diagram
-                  return (
-                    <Card key={tank.id}>
-                      <CardContent className="p-2">
-                        <TankDiagram
-                          tankId={tank.id}
-                          designation={tank.designation}
-                          assignments={tankAssignments}
-                          soldiers={soldiers}
-                          onAssignSlot={(role) => openAssignDialog(tank.id, role)}
-                          onUnassign={handleUnassign}
-                        />
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                      // Tank: standard 4-slot diagram
+                      return (
+                        <Card key={tank.id}>
+                          <CardContent className="p-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <select
+                                value={tank.departmentId ?? ''}
+                                onChange={(e) => setTankDepartment(tank.id, e.target.value || undefined)}
+                                className="h-6 text-[10px] rounded border border-input bg-transparent px-1"
+                                title="מחלקה"
+                              >
+                                <option value="">ללא מחלקה</option>
+                                {(departments ?? []).map(d => (
+                                  <option key={d.id} value={d.id}>{d.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <TankDiagram
+                              tankId={tank.id}
+                              designation={tank.designation}
+                              assignments={sortedAssignments}
+                              soldiers={soldiers}
+                              onAssignSlot={(role) => openAssignDialog(tank.id, role)}
+                              onUnassign={handleUnassign}
+                            />
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
 
               {tanks.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
@@ -441,12 +703,52 @@ export function AssignmentPage() {
                   : 'רכב רגיל — ללא הגבלת תפקידים או מספר אנשים'}
               </p>
             </div>
+            <div className="space-y-1">
+              <Label className="text-sm">מחלקה</Label>
+              <select
+                value={vehicleDepartmentId}
+                onChange={(e) => setVehicleDepartmentId(e.target.value)}
+                className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">ללא מחלקה</option>
+                {(departments ?? []).map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowVehicleDialog(false)}>ביטול</Button>
             <Button onClick={handleCreateVehicle} disabled={!vehicleName}>
               <Plus className="h-4 w-4 me-1" />
               צור רכב
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create department dialog */}
+      <Dialog open={showDeptDialog} onOpenChange={setShowDeptDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>מחלקה חדשה</DialogTitle>
+            <DialogDescription>צור מחלקה חדשה לקיבוץ רכבים</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-sm">שם המחלקה</Label>
+              <Input
+                value={deptName}
+                onChange={(e) => setDeptName(e.target.value)}
+                placeholder='לדוגמה: "מחלקה א" או "פלוגת חילוץ"'
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeptDialog(false)}>ביטול</Button>
+            <Button onClick={handleCreateDepartment} disabled={!deptName}>
+              <FolderPlus className="h-4 w-4 me-1" />
+              צור מחלקה
             </Button>
           </DialogFooter>
         </DialogContent>
