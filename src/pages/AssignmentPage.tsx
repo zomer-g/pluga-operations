@@ -117,15 +117,20 @@ export function AssignmentPage() {
           const bars = soldierAssignments.map((a) => {
             const assignmentConflicts = conflicts.get(a.id);
             const color = a.type === 'tank_role' ? ASSIGNMENT_COLORS.tank_role : ASSIGNMENT_COLORS.general_mission;
-            const label = a.type === 'tank_role'
+            const roleLabel = a.type === 'tank_role'
               ? a.role ? getCrewRoleLabel(a.role) : 'איש צוות 5'
               : a.missionName ?? 'משימה';
+            // Include vehicle name in tooltip
+            const vehicleName = a.tankId ? (tanks.find(t => t.id === a.tankId)?.designation ?? '') : '';
+            const tooltipParts = [roleLabel];
+            if (vehicleName) tooltipParts.push(vehicleName);
+            tooltipParts.push(`${new Date(a.startDateTime).toLocaleDateString('he-IL')} - ${new Date(a.endDateTime).toLocaleDateString('he-IL')}`);
             return {
               id: a.id,
               startDateTime: a.startDateTime,
               endDateTime: a.endDateTime,
               color,
-              tooltip: `${label}: ${new Date(a.startDateTime).toLocaleDateString('he-IL')} - ${new Date(a.endDateTime).toLocaleDateString('he-IL')}`,
+              tooltip: tooltipParts.join(' | '),
               isWarning: !!assignmentConflicts && assignmentConflicts.length > 0,
             };
           });
@@ -165,9 +170,15 @@ export function AssignmentPage() {
 
       for (const tank of deptTanks) {
         const tankAssignments = assignments.filter(a => a.tankId === tank.id);
+        if (tankAssignments.length === 0) continue;
+
+        // Add vehicle header row
+        rows.push({ id: `vehicle_${tank.id}`, label: tank.designation, bars: [], isVehicleHeader: true });
+
         // Group assignments by role in display order
         const roleAssignments = new Map<string, typeof assignments>();
         for (const a of tankAssignments) {
+          if (a.type === 'general_mission') continue;
           const roleKey = a.role ?? 'fifth';
           if (!roleAssignments.has(roleKey)) roleAssignments.set(roleKey, []);
           roleAssignments.get(roleKey)!.push(a);
@@ -194,7 +205,7 @@ export function AssignmentPage() {
           });
           rows.push({
             id: `${tank.id}_${role}`,
-            label: tank.designation,
+            label: '',
             sublabel: roleLabel,
             bars,
           });
@@ -214,7 +225,7 @@ export function AssignmentPage() {
               isWarning: !!assignmentConflicts && assignmentConflicts.length > 0,
             };
           });
-          rows.push({ id: `${tank.id}_missions`, label: tank.designation, sublabel: 'משימות', bars });
+          rows.push({ id: `${tank.id}_missions`, label: '', sublabel: 'משימות', bars });
         }
       }
     }

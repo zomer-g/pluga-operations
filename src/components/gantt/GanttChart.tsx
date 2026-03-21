@@ -19,6 +19,7 @@ export interface GanttRow {
   sublabel?: string;
   bars: GanttBar[];
   isGroupHeader?: boolean;
+  isVehicleHeader?: boolean;
 }
 
 interface GanttChartProps {
@@ -140,7 +141,7 @@ export function GanttChart({
               {/* Rows */}
               <div className="space-y-1">
                 {rows.map((row) => {
-                  // Group header row
+                  // Department header row
                   if (row.isGroupHeader) {
                     return (
                       <div key={row.id} className="flex items-center gap-3 min-h-[28px] mt-3 first:mt-0">
@@ -151,15 +152,28 @@ export function GanttChart({
                     );
                   }
 
+                  // Vehicle header row — distinct visual separator for each tank
+                  if (row.isVehicleHeader) {
+                    return (
+                      <div key={row.id} className="flex items-center gap-3 min-h-[26px] mt-2 first:mt-0">
+                        <div className="w-40 shrink-0 text-sm font-bold truncate text-primary">
+                          {row.label}
+                        </div>
+                        <div className="flex-1 border-b border-primary/30" />
+                      </div>
+                    );
+                  }
+
                   return (
                     <div key={row.id} className="flex items-center gap-3 min-h-[32px]">
                       {/* Label on right side (RTL) */}
                       <div className="w-40 shrink-0 text-sm truncate">
-                        <div className="font-medium truncate">{row.label}</div>
-                        {row.sublabel && (
-                          <div className="text-xs text-muted-foreground truncate">
+                        {row.sublabel ? (
+                          <div className="text-xs text-muted-foreground truncate ps-3">
                             {row.sublabel}
                           </div>
+                        ) : (
+                          <div className="font-medium truncate">{row.label}</div>
                         )}
                       </div>
 
