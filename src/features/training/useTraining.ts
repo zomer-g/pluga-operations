@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { generateId, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 import type { TrainingContent, TrainingTag, TrainingCategory } from '@/db/schema';
 
 // ===== Hooks =====
@@ -88,6 +89,7 @@ export function useTrainingCategories() {
 // ===== Mutations =====
 
 export async function addTrainingContent(data: Omit<TrainingContent, 'id' | 'createdAt' | 'updatedAt'>) {
+  await requireEditPermission('/training');
   const id = generateId();
   const now = new Date().toISOString();
   await setDoc(doc(db, 'trainingContent', id), stripUndefined({
@@ -100,6 +102,7 @@ export async function addTrainingContent(data: Omit<TrainingContent, 'id' | 'cre
 }
 
 export async function updateTrainingContent(id: string, data: Partial<TrainingContent>) {
+  await requireEditPermission('/training');
   await updateDoc(doc(db, 'trainingContent', id), stripUndefined({
     ...data,
     updatedAt: new Date().toISOString(),
@@ -107,25 +110,30 @@ export async function updateTrainingContent(id: string, data: Partial<TrainingCo
 }
 
 export async function deleteTrainingContent(id: string) {
+  await requireEditPermission('/training');
   await deleteDoc(doc(db, 'trainingContent', id));
 }
 
 export async function addTrainingTag(name: string, color?: string) {
+  await requireEditPermission('/training');
   const id = generateId();
   await setDoc(doc(db, 'trainingTags', id), stripUndefined({ id, name, color }) as any);
   return id;
 }
 
 export async function deleteTrainingTag(id: string) {
+  await requireEditPermission('/training');
   await deleteDoc(doc(db, 'trainingTags', id));
 }
 
 export async function addTrainingCategory(name: string, order: number = 0) {
+  await requireEditPermission('/training');
   const id = generateId();
   await setDoc(doc(db, 'trainingCategories', id), { id, name, order });
   return id;
 }
 
 export async function deleteTrainingCategory(id: string) {
+  await requireEditPermission('/training');
   await deleteDoc(doc(db, 'trainingCategories', id));
 }

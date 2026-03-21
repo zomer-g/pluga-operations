@@ -3,6 +3,7 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDo
 import { db } from '@/firebase';
 import type { Assignment, CrewRole, ShampafEntry, ShampafVacation } from '@/db/schema';
 import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 import { getSoldierShampafStatusAt } from './useShampaf';
 
 // ===== Queries =====
@@ -128,6 +129,7 @@ export async function addAssignment(data: {
   endDateTime: string;
   notes?: string;
 }): Promise<AddAssignmentResult> {
+  await requireEditPermission('/assignments');
   const warnings: string[] = [];
 
   // Check role constraints
@@ -167,9 +169,11 @@ export async function addAssignment(data: {
 }
 
 export async function updateAssignment(id: string, data: Partial<Assignment>): Promise<void> {
+  await requireEditPermission('/assignments');
   await updateDoc(doc(db, 'assignments', id), stripUndefined(data as any));
 }
 
 export async function deleteAssignment(id: string): Promise<void> {
+  await requireEditPermission('/assignments');
   await deleteDoc(doc(db, 'assignments', id));
 }

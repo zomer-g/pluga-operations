@@ -11,6 +11,7 @@ import {
 import { db } from '@/firebase';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { generateId, stripUndefined } from '@/lib/utils';
+import { requireAdminPermission } from '@/lib/check-permission';
 import type { PermissionGroup, UserPermission, PermissionAction } from '@/db/schema';
 import { ALL_PAGE_ROUTES } from '@/lib/constants';
 
@@ -144,24 +145,29 @@ export function useIsAdmin(): boolean | undefined {
 // ===== Mutations =====
 
 export async function addPermissionGroup(data: Omit<PermissionGroup, 'id'>) {
+  await requireAdminPermission('/permissions');
   const id = generateId();
   await setDoc(doc(db, 'permissionGroups', id), stripUndefined({ ...data, id }) as any);
   return id;
 }
 
 export async function updatePermissionGroup(id: string, data: Partial<PermissionGroup>) {
+  await requireAdminPermission('/permissions');
   await updateDoc(doc(db, 'permissionGroups', id), stripUndefined(data) as any);
 }
 
 export async function deletePermissionGroup(id: string) {
+  await requireAdminPermission('/permissions');
   await deleteDoc(doc(db, 'permissionGroups', id));
 }
 
 export async function setUserPermission(userId: string, data: Omit<UserPermission, 'id'>) {
+  await requireAdminPermission('/permissions');
   await setDoc(doc(db, 'userPermissions', userId), stripUndefined({ ...data, id: userId }) as any);
 }
 
 export async function removeUserPermission(userId: string) {
+  await requireAdminPermission('/permissions');
   await deleteDoc(doc(db, 'userPermissions', userId));
 }
 

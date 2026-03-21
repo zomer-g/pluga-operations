@@ -378,7 +378,7 @@ function ContentForm({
     document: '.pdf,.doc,.docx,.txt,.rtf,.odt',
     video: 'video/*',
     presentation: '.ppt,.pptx,.odp,.pdf',
-    other: '*',
+    other: '.pdf,.doc,.docx,.txt,.rtf,.odt,.ppt,.pptx,.odp,image/*,video/mp4,video/webm',
     link: '',
   };
 

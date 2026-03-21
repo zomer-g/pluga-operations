@@ -3,6 +3,7 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDo
 import { db } from '@/firebase';
 import type { ShampafEntry, ShampafVacation } from '@/db/schema';
 import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 
 // ===== Queries =====
 
@@ -140,6 +141,7 @@ export async function addShampafEntry(data: {
   orderNumber?: string;
   notes?: string;
 }): Promise<string> {
+  await requireEditPermission('/shampaf');
   const id = generateId();
   const entry: ShampafEntry = {
     id,
@@ -154,10 +156,12 @@ export async function addShampafEntry(data: {
 }
 
 export async function updateShampafEntry(id: string, data: Partial<ShampafEntry>): Promise<void> {
+  await requireEditPermission('/shampaf');
   await updateDoc(doc(db, 'shampafEntries', id), stripUndefined(data as any));
 }
 
 export async function deleteShampafEntry(id: string): Promise<void> {
+  await requireEditPermission('/shampaf');
   const batch = writeBatch(db);
 
   // Cascade: delete child vacations
@@ -180,6 +184,7 @@ export async function addShampafVacation(data: {
   reason?: string;
   notes?: string;
 }): Promise<string> {
+  await requireEditPermission('/shampaf');
   const id = generateId();
   const vacation: ShampafVacation = {
     id,
@@ -195,9 +200,11 @@ export async function addShampafVacation(data: {
 }
 
 export async function updateShampafVacation(id: string, data: Partial<ShampafVacation>): Promise<void> {
+  await requireEditPermission('/shampaf');
   await updateDoc(doc(db, 'shampafVacations', id), stripUndefined(data as any));
 }
 
 export async function deleteShampafVacation(id: string): Promise<void> {
+  await requireEditPermission('/shampaf');
   await deleteDoc(doc(db, 'shampafVacations', id));
 }

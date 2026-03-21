@@ -3,6 +3,7 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'fireb
 import { db } from '@/firebase';
 import type { Activation } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 
 export function useActivations() {
   const [activations, setActivations] = useState<Activation[] | undefined>();
@@ -45,6 +46,7 @@ export async function addActivation(data: {
   endDate: string;
   notes?: string;
 }): Promise<string> {
+  await requireEditPermission('/soldiers');
   const id = generateId();
   const activation: Activation = { id, ...data };
   await setDoc(doc(db, 'activations', id), stripUndefined(activation as unknown as any));
@@ -52,9 +54,11 @@ export async function addActivation(data: {
 }
 
 export async function updateActivation(id: string, data: Partial<Activation>): Promise<void> {
+  await requireEditPermission('/soldiers');
   await updateDoc(doc(db, 'activations', id), stripUndefined(data as any));
 }
 
 export async function deleteActivation(id: string): Promise<void> {
+  await requireEditPermission('/soldiers');
   await deleteDoc(doc(db, 'activations', id));
 }

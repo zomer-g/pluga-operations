@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { generateId, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 import type { RoutineTemplate, RoutineCrewSlot } from '@/db/schema';
 import { addAssignment } from '@/hooks/useAssignment';
 
@@ -50,6 +51,7 @@ export async function addRoutineTemplate(data: {
   crewSlots: RoutineCrewSlot[];
   notes?: string;
 }) {
+  await requireEditPermission('/routine');
   const id = generateId();
   const now = new Date().toISOString();
   await setDoc(doc(db, 'routineTemplates', id), stripUndefined({
@@ -62,6 +64,7 @@ export async function addRoutineTemplate(data: {
 }
 
 export async function updateRoutineTemplate(id: string, data: Partial<RoutineTemplate>) {
+  await requireEditPermission('/routine');
   await updateDoc(doc(db, 'routineTemplates', id), stripUndefined({
     ...data,
     updatedAt: new Date().toISOString(),
@@ -69,6 +72,7 @@ export async function updateRoutineTemplate(id: string, data: Partial<RoutineTem
 }
 
 export async function deleteRoutineTemplate(id: string) {
+  await requireEditPermission('/routine');
   await deleteDoc(doc(db, 'routineTemplates', id));
 }
 
@@ -81,6 +85,7 @@ export async function applyRoutineToAssignments(
   startDateTime: string,
   endDateTime: string
 ): Promise<string[]> {
+  await requireEditPermission('/routine');
   const snap = await getDoc(doc(db, 'routineTemplates', templateId));
   if (!snap.exists()) throw new Error('Template not found');
 

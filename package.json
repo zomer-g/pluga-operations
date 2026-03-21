@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "security-check": "bash scripts/security-check.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^4.1.0",

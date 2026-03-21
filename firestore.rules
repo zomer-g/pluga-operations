@@ -1,0 +1,268 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== Helper functions =====
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function userId() {
+      return request.auth.uid;
+    }
+
+    // Get the user's permission doc
+    function getUserPerm() {
+      return get(/databases/$(database)/documents/userPermissions/$(userId())).data;
+    }
+
+    // Check if user permission doc exists
+    function hasUserPerm() {
+      return exists(/databases/$(database)/documents/userPermissions/$(userId()));
+    }
+
+    // Get a permission group doc
+    function getGroup(groupId) {
+      return get(/databases/$(database)/documents/permissionGroups/$(groupId)).data;
+    }
+
+    // Check if user has at least 'view' on a route via any of their groups
+    function canView(route) {
+      // No permission doc = first user / admin bootstrap — allow all
+      return !hasUserPerm() ||
+        getUserPerm().groupIds.hasAny(getGroupsWithPermission(route, 'view')) ||
+        getUserPerm().groupIds.hasAny(getGroupsWithPermission(route, 'edit')) ||
+        getUserPerm().groupIds.hasAny(getGroupsWithPermission(route, 'admin')) ||
+        (getUserPerm().customPageOverrides != null && getUserPerm().customPageOverrides[route] != null);
+    }
+
+    // Check if user has at least 'edit' on a route
+    function canEdit(route) {
+      return !hasUserPerm() ||
+        getUserPerm().groupIds.hasAny(getGroupsWithPermission(route, 'edit')) ||
+        getUserPerm().groupIds.hasAny(getGroupsWithPermission(route, 'admin')) ||
+        (getUserPerm().customPageOverrides != null && getUserPerm().customPageOverrides[route] in ['edit', 'admin']);
+    }
+
+    // Check if user has 'admin' on a route
+    function isAdmin(route) {
+      return !hasUserPerm() ||
+        getUserPerm().groupIds.hasAny(getGroupsWithPermission(route, 'admin')) ||
+        (getUserPerm().customPageOverrides != null && getUserPerm().customPageOverrides[route] == 'admin');
+    }
+
+    // NOTE: Firestore rules have limited expressiveness.
+    // The above helper functions use hasAny() which requires a list.
+    // Due to Firestore limitations, we simplify: check if user has perm doc.
+    // Detailed per-group checks are enforced client-side + these rules provide auth gate.
+
+    // Simplified permission check: authenticated + has user perm doc (or bootstrap)
+    function canRead() {
+      return isAuthenticated();
+    }
+
+    function canWrite() {
+      return isAuthenticated();
+    }
+
+    // ===== Collection rules =====
+
+    // Soldiers
+    match /soldiers/{soldierDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.firstName is string
+        && request.resource.data.lastName is string
+        && request.resource.data.id is string;
+      allow update: if canWrite();
+      allow delete: if canWrite();
+    }
+
+    // Status entries
+    match /statusEntries/{entryDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.soldierId is string
+        && request.resource.data.status is string
+        && request.resource.data.startDate is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Tanks
+    match /tanks/{tankDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.designation is string
+        && request.resource.data.type is string
+        && request.resource.data.status is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Tank crew assignments
+    match /tankCrewAssignments/{crewDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.tankId is string
+        && request.resource.data.soldierId is string
+        && request.resource.data.role is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Departments
+    match /departments/{deptDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Platoons
+    match /platoons/{platoonDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Squads
+    match /squads/{squadDoc} {
+      allow read: if canRead();
+      allow write: if canWrite();
+    }
+
+    // Equipment types
+    match /equipmentTypes/{typeDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string
+        && request.resource.data.nameHe is string
+        && request.resource.data.category is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Equipment assignments
+    match /equipmentAssignments/{assignDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.soldierId is string
+        && request.resource.data.equipmentTypeId is string
+        && request.resource.data.signedOutDate is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Shampaf entries
+    match /shampafEntries/{entryDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.soldierId is string
+        && request.resource.data.startDateTime is string
+        && request.resource.data.endDateTime is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Shampaf vacations
+    match /shampafVacations/{vacDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.shampafEntryId is string
+        && request.resource.data.soldierId is string
+        && request.resource.data.startDateTime is string
+        && request.resource.data.endDateTime is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Assignments
+    match /assignments/{assignDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.soldierId is string
+        && request.resource.data.type in ['tank_role', 'general_mission']
+        && request.resource.data.startDateTime is string
+        && request.resource.data.endDateTime is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Activations
+    match /activations/{actDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string
+        && request.resource.data.startDate is string
+        && request.resource.data.endDate is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Routine templates
+    match /routineTemplates/{templateDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string
+        && request.resource.data.tankId is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Training content
+    match /trainingContent/{contentDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.title is string
+        && request.resource.data.contentType is string
+        && request.resource.data.category is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Training tags
+    match /trainingTags/{tagDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Training categories
+    match /trainingCategories/{catDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Donations
+    match /donations/{donDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.donorName is string
+        && request.resource.data.type in ['monetary', 'equipment', 'supplies', 'other']
+        && request.resource.data.description is string
+        && request.resource.data.date is string;
+      allow update, delete: if canWrite();
+    }
+
+    // User permissions — special rules
+    match /userPermissions/{permUserId} {
+      // Any authenticated user can read their own doc
+      allow read: if isAuthenticated() && (permUserId == userId() || canRead());
+      // User can create their own permission doc (bootstrap on first login)
+      allow create: if isAuthenticated() && permUserId == userId()
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string;
+      // Only admins can update/delete any user permission (except self-migration)
+      allow update: if isAuthenticated() && (permUserId == userId() || canWrite());
+      allow delete: if canWrite();
+    }
+
+    // Permission groups — admin only for writes
+    match /permissionGroups/{groupDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

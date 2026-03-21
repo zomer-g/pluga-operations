@@ -3,6 +3,7 @@ import { collection, query, onSnapshot, doc, deleteDoc, updateDoc, getDocs, wher
 import { db } from '@/firebase';
 import type { StatusEntry, SoldierStatus } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 import type { StatusEntryFormData } from '@/lib/validators';
 
 export function useStatusHistory(soldierId?: string) {
@@ -101,6 +102,7 @@ export async function addStatusEntry(
   soldierId: string,
   data: StatusEntryFormData
 ): Promise<string> {
+  await requireEditPermission('/soldiers');
   const id = generateId();
 
   // Find open entries to close
@@ -135,9 +137,11 @@ export async function addStatusEntry(
 }
 
 export async function updateStatusEntry(id: string, data: Partial<StatusEntry>): Promise<void> {
+  await requireEditPermission('/soldiers');
   await updateDoc(doc(db, 'statusEntries', id), stripUndefined(data as any));
 }
 
 export async function deleteStatusEntry(id: string): Promise<void> {
+  await requireEditPermission('/soldiers');
   await deleteDoc(doc(db, 'statusEntries', id));
 }

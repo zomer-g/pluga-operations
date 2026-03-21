@@ -1,5 +1,6 @@
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
+import { requireAdminPermission } from '@/lib/check-permission';
 
 const COLLECTIONS = [
   'soldiers', 'equipmentTypes', 'equipmentAssignments', 'statusEntries',
@@ -9,13 +10,31 @@ const COLLECTIONS = [
   'donations', 'userPermissions', 'permissionGroups',
 ];
 
+/** Fields that should never appear in imported data (prototype pollution prevention) */
+const DANGEROUS_FIELDS = new Set(['__proto__', 'constructor', 'prototype']);
+
 interface BackupData {
   version: number;
   exportDate: string;
   tables: Record<string, unknown[]>;
 }
 
+/** Sanitize a record: remove dangerous fields and ensure id is a non-empty string */
+function sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> | null {
+  const id = record['id'];
+  if (typeof id !== 'string' || id.length === 0) return null;
+
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (!DANGEROUS_FIELDS.has(key)) {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
 export async function exportData(): Promise<string> {
+  await requireAdminPermission('/settings');
   const tables: Record<string, unknown[]> = {};
   for (const name of COLLECTIONS) {
     const snap = await getDocs(collection(db, name));
@@ -30,11 +49,21 @@ export async function exportData(): Promise<string> {
 }
 
 export async function importData(jsonString: string): Promise<{ success: boolean; message: string }> {
+  await requireAdminPermission('/settings');
+
   try {
-    const backup = JSON.parse(jsonString) as BackupData;
-    if (!backup.version || !backup.tables) {
-      return { success: false, message: 'קובץ גיבוי לא תקין' };
+    let backup: BackupData;
+    try {
+      backup = JSON.parse(jsonString);
+    } catch {
+      return { success: false, message: 'קובץ JSON לא תקין' };
     }
+
+    if (typeof backup.version !== 'number' || typeof backup.tables !== 'object' || backup.tables === null) {
+      return { success: false, message: 'קובץ גיבוי לא תקין — חסרים שדות version או tables' };
+    }
+
+    let skippedRecords = 0;
 
     for (const name of COLLECTIONS) {
       const data = backup.tables[name];
@@ -53,19 +82,28 @@ export async function importData(jsonString: string): Promise<{ success: boolean
         const batch = writeBatch(db);
         const chunk = data.slice(i, i + 500);
         for (const item of chunk) {
-          const record = item as Record<string, unknown>;
-          const id = record['id'] as string;
-          if (id) {
-            batch.set(doc(db, name, id), record);
+          if (typeof item !== 'object' || item === null) {
+            skippedRecords++;
+            continue;
           }
+          const record = sanitizeRecord(item as Record<string, unknown>);
+          if (!record) {
+            skippedRecords++;
+            continue;
+          }
+          batch.set(doc(db, name, record['id'] as string), record);
         }
         await batch.commit();
       }
     }
 
-    return { success: true, message: 'הנתונים יובאו בהצלחה' };
-  } catch {
-    return { success: false, message: 'שגיאה בייבוא הנתונים' };
+    const msg = skippedRecords > 0
+      ? `הנתונים יובאו בהצלחה (${skippedRecords} רשומות לא תקינות דולגו)`
+      : 'הנתונים יובאו בהצלחה';
+    return { success: true, message: msg };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'שגיאה בייבוא הנתונים';
+    return { success: false, message: msg };
   }
 }
 

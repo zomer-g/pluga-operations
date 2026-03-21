@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { generateId, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 import type { Donation, DonationType } from '@/db/schema';
 
 interface DonationFilters {
@@ -69,6 +70,7 @@ export function useDonationStats(donations: Donation[] | undefined) {
 // ===== Mutations =====
 
 export async function addDonation(data: Omit<Donation, 'id' | 'createdAt'>) {
+  await requireEditPermission('/donations');
   const id = generateId();
   await setDoc(doc(db, 'donations', id), stripUndefined({
     ...data,
@@ -79,9 +81,11 @@ export async function addDonation(data: Omit<Donation, 'id' | 'createdAt'>) {
 }
 
 export async function updateDonation(id: string, data: Partial<Donation>) {
+  await requireEditPermission('/donations');
   await updateDoc(doc(db, 'donations', id), stripUndefined(data) as any);
 }
 
 export async function deleteDonation(id: string) {
+  await requireEditPermission('/donations');
   await deleteDoc(doc(db, 'donations', id));
 }

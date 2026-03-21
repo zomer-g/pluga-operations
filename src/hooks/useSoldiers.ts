@@ -3,6 +3,7 @@ import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, getDocs
 import { db } from '@/firebase';
 import type { Soldier, SoldierRank } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 import type { SoldierFormData } from '@/lib/validators';
 
 interface SoldierFilters {
@@ -95,6 +96,7 @@ export function useSoldierCount() {
 }
 
 export async function addSoldier(data: SoldierFormData): Promise<string> {
+  await requireEditPermission('/soldiers');
   const now = new Date().toISOString();
   const id = generateId();
   const soldier: Soldier = {
@@ -114,10 +116,12 @@ export async function addSoldier(data: SoldierFormData): Promise<string> {
 }
 
 export async function updateSoldier(id: string, data: SoldierFormData): Promise<void> {
+  await requireEditPermission('/soldiers');
   await updateDoc(doc(db, 'soldiers', id), stripUndefined({ ...data, email: data.email || undefined, updatedAt: new Date().toISOString() } as any));
 }
 
 export async function deleteSoldier(id: string): Promise<void> {
+  await requireEditPermission('/soldiers');
   const batch = writeBatch(db);
 
   // Delete soldier
@@ -134,6 +138,18 @@ export async function deleteSoldier(id: string): Promise<void> {
   // Cascade: delete tank crew assignments
   const tcSnap = await getDocs(query(collection(db, 'tankCrewAssignments'), where('soldierId', '==', id)));
   tcSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // Cascade: delete assignments
+  const assignSnap = await getDocs(query(collection(db, 'assignments'), where('soldierId', '==', id)));
+  assignSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // Cascade: delete shampaf entries and their vacations
+  const shampafSnap = await getDocs(query(collection(db, 'shampafEntries'), where('soldierId', '==', id)));
+  for (const d of shampafSnap.docs) {
+    batch.delete(d.ref);
+    const vacSnap = await getDocs(query(collection(db, 'shampafVacations'), where('shampafEntryId', '==', d.id)));
+    vacSnap.docs.forEach(v => batch.delete(v.ref));
+  }
 
   await batch.commit();
 }

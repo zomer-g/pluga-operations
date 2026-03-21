@@ -3,6 +3,7 @@ import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateD
 import { db } from '@/firebase';
 import type { EquipmentAssignment, EquipmentType } from '@/db/schema';
 import { generateId, todayString, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 import type { EquipmentAssignFormData, EquipmentTypeFormData } from '@/lib/validators';
 
 export function useEquipmentTypes(category?: string) {
@@ -69,6 +70,7 @@ export function useActiveAssignmentCount() {
 }
 
 export async function addEquipmentType(data: EquipmentTypeFormData): Promise<string> {
+  await requireEditPermission('/equipment');
   const id = generateId();
   const equipType = { id, ...data } as EquipmentType;
   await setDoc(doc(db, 'equipmentTypes', id), equipType);
@@ -79,6 +81,7 @@ export async function assignEquipment(
   soldierId: string,
   data: EquipmentAssignFormData
 ): Promise<string> {
+  await requireEditPermission('/equipment');
   const id = generateId();
   const assignment: EquipmentAssignment = {
     id,
@@ -98,6 +101,7 @@ export async function returnEquipment(
   condition: string,
   notes?: string
 ): Promise<void> {
+  await requireEditPermission('/equipment');
   await updateDoc(doc(db, 'equipmentAssignments', assignmentId), stripUndefined({
     signedInDate: todayString(),
     condition: condition as EquipmentAssignment['condition'],
@@ -106,5 +110,6 @@ export async function returnEquipment(
 }
 
 export async function deleteEquipmentType(id: string): Promise<void> {
+  await requireEditPermission('/equipment');
   await deleteDoc(doc(db, 'equipmentTypes', id));
 }

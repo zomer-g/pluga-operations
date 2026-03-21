@@ -3,6 +3,7 @@ import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateD
 import { db } from '@/firebase';
 import type { Tank, TankCrewAssignment, CrewRole, Department } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
+import { requireEditPermission } from '@/lib/check-permission';
 import type { TankFormData, CrewAssignFormData } from '@/lib/validators';
 
 export function useTanks(platoonId?: string) {
@@ -112,6 +113,7 @@ export function useAllCrewAssignments() {
 }
 
 export async function addTank(data: TankFormData): Promise<string> {
+  await requireEditPermission('/assignments');
   const id = generateId();
   const tank: Tank = {
     id,
@@ -127,10 +129,12 @@ export async function addTank(data: TankFormData): Promise<string> {
 }
 
 export async function updateTank(id: string, data: TankFormData): Promise<void> {
+  await requireEditPermission('/assignments');
   await updateDoc(doc(db, 'tanks', id), stripUndefined({ ...data, platoonId: data.platoonId || undefined, notes: data.notes || undefined } as any));
 }
 
 export async function deleteTank(id: string): Promise<void> {
+  await requireEditPermission('/assignments');
   const batch = writeBatch(db);
 
   batch.delete(doc(db, 'tanks', id));
@@ -139,6 +143,14 @@ export async function deleteTank(id: string): Promise<void> {
   const crewSnap = await getDocs(query(collection(db, 'tankCrewAssignments'), where('tankId', '==', id)));
   crewSnap.docs.forEach(d => batch.delete(d.ref));
 
+  // Cascade: delete assignments referencing this tank
+  const assignSnap = await getDocs(query(collection(db, 'assignments'), where('tankId', '==', id)));
+  assignSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // Cascade: delete routine templates for this tank
+  const routineSnap = await getDocs(query(collection(db, 'routineTemplates'), where('tankId', '==', id)));
+  routineSnap.docs.forEach(d => batch.delete(d.ref));
+
   await batch.commit();
 }
 
@@ -146,6 +158,7 @@ export async function assignCrew(
   tankId: string,
   data: CrewAssignFormData
 ): Promise<string> {
+  await requireEditPermission('/assignments');
   const id = generateId();
   const batch = writeBatch(db);
 
@@ -186,6 +199,7 @@ export async function assignCrew(
 }
 
 export async function unassignCrew(assignmentId: string): Promise<void> {
+  await requireEditPermission('/assignments');
   await updateDoc(doc(db, 'tankCrewAssignments', assignmentId), {
     endDate: new Date().toISOString().split('T')[0],
   });
@@ -206,12 +220,14 @@ export function usePlatoons() {
 }
 
 export async function addPlatoon(name: string, number: number): Promise<string> {
+  await requireEditPermission('/settings');
   const id = generateId();
   await setDoc(doc(db, 'platoons', id), { id, name, number });
   return id;
 }
 
 export async function deletePlatoon(id: string): Promise<void> {
+  await requireEditPermission('/settings');
   await deleteDoc(doc(db, 'platoons', id));
 }
 
@@ -232,20 +248,24 @@ export function useDepartments() {
 }
 
 export async function addDepartment(name: string, order: number = 0): Promise<string> {
+  await requireEditPermission('/assignments');
   const id = generateId();
   await setDoc(doc(db, 'departments', id), { id, name, order });
   return id;
 }
 
 export async function updateDepartment(id: string, data: { name?: string; order?: number }): Promise<void> {
+  await requireEditPermission('/assignments');
   await updateDoc(doc(db, 'departments', id), stripUndefined(data as any));
 }
 
 export async function deleteDepartment(id: string): Promise<void> {
+  await requireEditPermission('/assignments');
   await deleteDoc(doc(db, 'departments', id));
 }
 
 export async function setTankDepartment(tankId: string, departmentId: string | undefined): Promise<void> {
+  await requireEditPermission('/assignments');
   if (departmentId) {
     await updateDoc(doc(db, 'tanks', tankId), { departmentId });
   } else {

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useAppStore, type CacheCategory } from '@/stores/useAppStore';
 import { exportData, importData, downloadBackup } from '@/db/backup';
 import { usePlatoons, addPlatoon, deletePlatoon } from '@/hooks/useTanks';
+import { useIsAdmin } from '@/features/permissions/usePermissions';
 
 const CACHE_CATEGORIES: { key: CacheCategory; label: string }[] = [
   { key: 'soldiers', label: 'חיילים' },
@@ -27,6 +28,7 @@ const CACHE_CATEGORIES: { key: CacheCategory; label: string }[] = [
 export function SettingsPage() {
   const { theme, toggleTheme, offlineCategories, toggleOfflineCategory } = useAppStore();
   const platoons = usePlatoons();
+  const isAdmin = useIsAdmin();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showAddPlatoon, setShowAddPlatoon] = useState(false);
@@ -223,8 +225,13 @@ export function SettingsPage() {
           <CardDescription>ייצוא וייבוא של כל הנתונים כקובץ JSON</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!isAdmin && (
+            <div className="text-sm text-amber-500 bg-amber-500/10 p-2 rounded mb-2">
+              רק מנהלי מערכת יכולים לייצא/לייבא נתונים
+            </div>
+          )}
           <div className="flex gap-3">
-            <Button onClick={handleExport} className="flex-1">
+            <Button onClick={handleExport} className="flex-1" disabled={!isAdmin}>
               <Download className="h-4 w-4 me-2" />
               ייצוא נתונים
             </Button>
@@ -232,6 +239,7 @@ export function SettingsPage() {
               variant="outline"
               className="flex-1"
               onClick={() => fileInputRef.current?.click()}
+              disabled={!isAdmin}
             >
               <Upload className="h-4 w-4 me-2" />
               ייבוא נתונים
@@ -290,7 +298,7 @@ export function SettingsPage() {
               <Input ref={legacyRefs.assignments} type="file" accept=".csv" className="h-9 text-sm" />
             </div>
           </div>
-          <Button onClick={handleLegacyImport} disabled={legacyLoading} className="w-full">
+          <Button onClick={handleLegacyImport} disabled={legacyLoading || !isAdmin} className="w-full">
             <FileUp className="h-4 w-4 me-2" />
             {legacyLoading ? 'מייבא...' : 'ייבא נתונים'}
           </Button>
@@ -312,7 +320,7 @@ export function SettingsPage() {
           <CardTitle className="text-lg text-destructive">אזור מסוכן</CardTitle>
         </CardHeader>
         <CardContent>
-          <Button variant="destructive" onClick={() => setShowClearConfirm(true)}>
+          <Button variant="destructive" onClick={() => setShowClearConfirm(true)} disabled={!isAdmin}>
             <Trash2 className="h-4 w-4 me-2" />
             מחק את כל הנתונים
           </Button>
