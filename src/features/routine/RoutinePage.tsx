@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Calendar, Plus, Trash2, Play, Edit3, Truck } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Calendar, Plus, Trash2, Clock, User } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,40 +9,46 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { TankDiagram } from '@/components/tanks/TankDiagram';
 import {
   useRoutineTemplates,
+  useRoutineChangeLogs,
   addRoutineTemplate,
-  updateRoutineTemplate,
   deleteRoutineTemplate,
-  applyRoutineToAssignments,
+  assignRoutineSlot,
+  unassignRoutineSlot,
 } from './useRoutine';
-import { useTanks, addTank } from '@/hooks/useTanks';
+import { useTanks, useDepartments } from '@/hooks/useTanks';
 import { useSoldiers } from '@/hooks/useSoldiers';
-import { getCrewRoleLabel, CREW_ROLES, VEHICLE_CATEGORIES } from '@/lib/constants';
-import { noonToday, noonTomorrow } from '@/lib/utils';
-import type { RoutineCrewSlot, CrewRole, VehicleCategory } from '@/db/schema';
+import { getCrewRoleLabel, ROLE_DISPLAY_ORDER } from '@/lib/constants';
+import type { CrewRole, Assignment } from '@/db/schema';
 
 export function RoutinePage() {
   const templates = useRoutineTemplates();
   const tanks = useTanks();
   const soldiers = useSoldiers();
-  const [addOpen, setAddOpen] = useState(false);
-  const [applyOpen, setApplyOpen] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [vehicleOpen, setVehicleOpen] = useState(false);
-  const [newVehicleName, setNewVehicleName] = useState('');
-  const [newVehicleType, setNewVehicleType] = useState('');
-  const [newVehicleCategory, setNewVehicleCategory] = useState<VehicleCategory>('tank');
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const departments = useDepartments();
+  const changeLogs = useRoutineChangeLogs();
+
+  // Create template dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newTankId, setNewTankId] = useState('');
+
+  // Assign dialog
+  const [assignDialog, setAssignDialog] = useState<{
+    open: boolean;
+    templateId: string;
+    tankId: string;
+    role: CrewRole | 'fifth' | null;
+  }>({ open: false, templateId: '', tankId: '', role: null });
+  const [assignSoldierId, setAssignSoldierId] = useState('');
+
+  // Change log dialog
+  const [showLogDialog, setShowLogDialog] = useState(false);
 
   if (!templates || !tanks || !soldiers) {
     return (
@@ -52,414 +58,342 @@ export function RoutinePage() {
     );
   }
 
-  const getSoldierName = (id: string) => {
-    const s = soldiers.find(s => s.id === id);
-    return s ? `${s.firstName} ${s.lastName}` : 'לא ידוע';
+  // Group templates by department (via their tank's departmentId)
+  const templatesByDept = (() => {
+    const deptOrder = new Map((departments ?? []).map((d, i) => [d.id, i]));
+    const deptNameMap = new Map((departments ?? []).map(d => [d.id, d.name]));
+
+    // Sort templates by tank's department order then tank designation
+    const sorted = [...templates].sort((a, b) => {
+      const tankA = tanks.find(t => t.id === a.tankId);
+      const tankB = tanks.find(t => t.id === b.tankId);
+      const deptA = tankA?.departmentId ? (deptOrder.get(tankA.departmentId) ?? 999) : 999;
+      const deptB = tankB?.departmentId ? (deptOrder.get(tankB.departmentId) ?? 999) : 999;
+      if (deptA !== deptB) return deptA - deptB;
+      return (tankA?.designation ?? '').localeCompare(tankB?.designation ?? '', 'he');
+    });
+
+    const groups: { deptId: string; deptName: string; templates: typeof templates }[] = [];
+    const seen = new Set<string>();
+
+    for (const tmpl of sorted) {
+      const tank = tanks.find(t => t.id === tmpl.tankId);
+      const deptId = tank?.departmentId || '__none__';
+      if (!seen.has(deptId)) {
+        seen.add(deptId);
+        groups.push({
+          deptId,
+          deptName: deptId === '__none__' ? '' : (deptNameMap.get(deptId) ?? ''),
+          templates: [],
+        });
+      }
+      groups.find(g => g.deptId === deptId)!.templates.push(tmpl);
+    }
+
+    return groups;
+  })();
+
+  // Convert routine template crew slots to Assignment-like objects for TankDiagram
+  const templateToAssignments = (tmpl: typeof templates[0]): Assignment[] => {
+    return tmpl.crewSlots.map((slot, i) => ({
+      id: `routine_${tmpl.id}_${i}`,
+      soldierId: slot.soldierId,
+      type: 'tank_role' as const,
+      tankId: tmpl.tankId,
+      role: slot.role,
+      startDateTime: '',
+      endDateTime: '',
+    }));
   };
 
-  const getTankName = (id: string) => {
-    const t = tanks.find(t => t.id === id);
-    return t ? t.designation : 'לא ידוע';
+  const handleCreateTemplate = async () => {
+    if (!newName || !newTankId) return;
+    await addRoutineTemplate({ name: newName, tankId: newTankId, crewSlots: [] });
+    setShowCreateDialog(false);
+    setNewName('');
+    setNewTankId('');
+  };
+
+  const openAssignDialog = (templateId: string, tankId: string, role: CrewRole | 'fifth') => {
+    setAssignDialog({ open: true, templateId, tankId, role });
+    setAssignSoldierId('');
+  };
+
+  const handleAssign = async () => {
+    if (!assignSoldierId || !assignDialog.templateId || !assignDialog.role) return;
+    const soldier = soldiers.find(s => s.id === assignSoldierId);
+    const soldierName = soldier ? `${soldier.firstName} ${soldier.lastName}` : '';
+    await assignRoutineSlot(assignDialog.templateId, assignDialog.role, assignSoldierId, soldierName);
+    setAssignDialog({ open: false, templateId: '', tankId: '', role: null });
+  };
+
+  const handleUnassign = async (templateId: string, role: CrewRole, soldierId: string) => {
+    const soldier = soldiers.find(s => s.id === soldierId);
+    const soldierName = soldier ? `${soldier.firstName} ${soldier.lastName}` : '';
+    await unassignRoutineSlot(templateId, role, soldierId, soldierName);
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Calendar className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">שגרת שיבוץ</h1>
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-2xl font-bold">שגרת שיבוץ</h2>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setVehicleOpen(true)} className="gap-2">
-            <Truck className="h-4 w-4" />
-            רכב חדש
+          <Button size="sm" variant="outline" onClick={() => setShowLogDialog(true)}>
+            <Clock className="h-4 w-4 ml-1" />
+            יומן שינויים
           </Button>
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              תבנית חדשה
-            </Button>
-          </DialogTrigger>
-          <DialogContent dir="rtl" className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>תבנית שגרה חדשה</DialogTitle>
-            </DialogHeader>
-            <TemplateForm
-              tanks={tanks}
-              soldiers={soldiers}
-              onSave={async (data) => {
-                await addRoutineTemplate(data);
-                setAddOpen(false);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+          <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 ml-1" />
+            שגרה חדשה
+          </Button>
         </div>
       </div>
 
-      <p className="text-muted-foreground text-sm">
-        הגדר צוותי ברירת מחדל לכל רכב. לחץ &quot;הפעל&quot; ליצירת שיבוצים אוטומטית.
+      <p className="text-sm text-muted-foreground">
+        שגרת ברירת מחדל לצוותי הרכבים. שינויים נרשמים ביומן.
       </p>
 
-      {message && (
-        <div className={`p-3 rounded-lg text-sm ${
-          message.type === 'success' ? 'bg-green-900/30 text-green-300 border border-green-700/50' : 'bg-destructive/10 text-destructive border border-destructive/30'
-        }`}>
-          {message.text}
-        </div>
-      )}
-
-      {templates.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            אין תבניות שגרה. צור תבנית חדשה כדי להתחיל.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {templates.map((tmpl) => (
-            <Card key={tmpl.id}>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-base">
-                  <span>{tmpl.name}</span>
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {getTankName(tmpl.tankId)}
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Crew slots */}
-                <div className="space-y-2">
-                  {tmpl.crewSlots.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">אין צוות מוגדר</p>
-                  ) : (
-                    tmpl.crewSlots.map((slot, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm bg-card border rounded px-3 py-2">
-                        <span className="text-foreground">{getSoldierName(slot.soldierId)}</span>
-                        <span className="text-muted-foreground">{getCrewRoleLabel(slot.role)}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {tmpl.notes && (
-                  <p className="text-xs text-muted-foreground">{tmpl.notes}</p>
-                )}
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 pt-2">
-                  <Button
-                    size="sm"
-                    className="flex-1 gap-2"
-                    onClick={() => setApplyOpen(tmpl.id)}
-                  >
-                    <Play className="h-3 w-3" />
-                    הפעל
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditingId(tmpl.id)}
-                    aria-label="ערוך תבנית"
-                  >
-                    <Edit3 className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={async () => {
-                      if (confirm('למחוק תבנית זו?')) {
-                        await deleteRoutineTemplate(tmpl.id);
-                      }
-                    }}
-                    aria-label="מחק תבנית"
-                  >
-                    <Trash2 className="h-3 w-3 text-destructive" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Apply Dialog */}
-      <Dialog open={!!applyOpen} onOpenChange={(open) => !open && setApplyOpen(null)}>
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>הפעלת שגרה</DialogTitle>
-          </DialogHeader>
-          <ApplyForm
-            templateId={applyOpen}
-            onApply={async (templateId, start, end) => {
-              try {
-                const warnings = await applyRoutineToAssignments(templateId, start, end);
-                setApplyOpen(null);
-                if (warnings.length > 0) {
-                  setMessage({ type: 'success', text: `שיבוצים נוצרו עם ${warnings.length} אזהרות: ${warnings.join(', ')}` });
-                } else {
-                  setMessage({ type: 'success', text: 'שיבוצים נוצרו בהצלחה!' });
-                }
-                setTimeout(() => setMessage(null), 5000);
-              } catch (err) {
-                setMessage({ type: 'error', text: `שגיאה: ${(err as Error).message}` });
-              }
-            }}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={!!editingId} onOpenChange={(open) => !open && setEditingId(null)}>
-        <DialogContent dir="rtl" className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>עריכת תבנית</DialogTitle>
-          </DialogHeader>
-          {editingId && (
-            <EditTemplateForm
-              templateId={editingId}
-              templates={templates}
-              tanks={tanks}
-              soldiers={soldiers}
-              onSave={async (data) => {
-                await updateRoutineTemplate(editingId, data);
-                setEditingId(null);
-              }}
-            />
+      {/* Template cards grouped by department — like tanks tab */}
+      {templatesByDept.map((group) => (
+        <div key={group.deptId} className="space-y-3">
+          {group.deptName && (
+            <div className="border-b pb-1">
+              <h3 className="text-sm font-bold text-muted-foreground">{group.deptName}</h3>
+            </div>
           )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {group.templates.map((tmpl) => {
+              const tank = tanks.find(t => t.id === tmpl.tankId);
+              const isStandard = tank?.vehicleCategory === 'standard';
+              const assignments = templateToAssignments(tmpl);
+
+              // Sort by role display order
+              const sortedAssignments = [...assignments].sort((a, b) => {
+                const orderA = a.role ? ROLE_DISPLAY_ORDER.indexOf(a.role) : ROLE_DISPLAY_ORDER.length;
+                const orderB = b.role ? ROLE_DISPLAY_ORDER.indexOf(b.role) : ROLE_DISPLAY_ORDER.length;
+                return orderA - orderB;
+              });
+
+              if (isStandard) {
+                return (
+                  <Card key={tmpl.id}>
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold">{tmpl.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => {
+                            if (confirm(`למחוק את "${tmpl.name}"?`)) deleteRoutineTemplate(tmpl.id);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </div>
+                      <div className="text-xs text-muted-foreground">{tank?.designation ?? ''}</div>
+                      <div className="space-y-1">
+                        {sortedAssignments.length === 0 && (
+                          <p className="text-xs text-muted-foreground text-center py-2">אין צוות מוגדר</p>
+                        )}
+                        {sortedAssignments.map((a) => {
+                          const s = soldiers.find(s => s.id === a.soldierId);
+                          return (
+                            <div key={a.id} className="flex items-center justify-between text-xs border rounded px-2 py-1.5">
+                              <span>{s ? `${s.firstName} ${s.lastName}` : '---'}</span>
+                              {a.role && (
+                                <button
+                                  onClick={() => handleUnassign(tmpl.id, a.role!, a.soldierId)}
+                                  className="text-destructive hover:text-destructive/80 text-xs"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full text-xs h-8"
+                        onClick={() => openAssignDialog(tmpl.id, tmpl.tankId, 'fifth')}
+                      >
+                        <Plus className="h-3 w-3 me-1" />
+                        הוסף חייל
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              }
+
+              // Tank: TankDiagram
+              return (
+                <Card key={tmpl.id}>
+                  <CardContent className="p-2">
+                    <div className="flex items-center justify-between px-2 pt-1">
+                      <span className="text-xs font-medium text-muted-foreground">{tmpl.name}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          if (confirm(`למחוק את "${tmpl.name}"?`)) deleteRoutineTemplate(tmpl.id);
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
+                    <TankDiagram
+                      tankId={tmpl.tankId}
+                      designation={tank?.designation ?? tmpl.name}
+                      assignments={sortedAssignments}
+                      soldiers={soldiers}
+                      onAssignSlot={(role) => openAssignDialog(tmpl.id, tmpl.tankId, role)}
+                      onUnassign={(assignmentId) => {
+                        // Find which slot this is
+                        const idx = parseInt(assignmentId.split('_').pop() ?? '0');
+                        const slot = tmpl.crewSlots[idx];
+                        if (slot) handleUnassign(tmpl.id, slot.role, slot.soldierId);
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {templates.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <Calendar className="h-12 w-12 mx-auto mb-3 opacity-40" />
+          <p>אין שגרות מוגדרות</p>
+          <p className="text-xs mt-1">לחץ "שגרה חדשה" להתחלה</p>
+        </div>
+      )}
+
+      {/* Assign soldier dialog */}
+      <Dialog
+        open={assignDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setAssignDialog({ open: false, templateId: '', tankId: '', role: null });
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>שיבוץ חייל לשגרה</DialogTitle>
+            <DialogDescription>
+              {assignDialog.role && assignDialog.role !== 'fifth'
+                ? `תפקיד: ${getCrewRoleLabel(assignDialog.role as CrewRole)}`
+                : 'איש צוות'}
+              {' | '}
+              רכב: {tanks.find(t => t.id === assignDialog.tankId)?.designation ?? '---'}
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <Label className="text-sm">בחר חייל</Label>
+            <select
+              value={assignSoldierId}
+              onChange={(e) => setAssignSoldierId(e.target.value)}
+              className="mt-1 h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">בחר...</option>
+              {soldiers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.firstName} {s.lastName}
+                  {s.trainedRole ? ` (${getCrewRoleLabel(s.trainedRole)})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialog({ open: false, templateId: '', tankId: '', role: null })}>
+              ביטול
+            </Button>
+            <Button onClick={handleAssign} disabled={!assignSoldierId}>
+              שבץ
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Create Vehicle Dialog */}
-      <Dialog open={vehicleOpen} onOpenChange={setVehicleOpen}>
-        <DialogContent dir="rtl">
+      {/* Create template dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>צור רכב חדש</DialogTitle>
+            <DialogTitle>שגרה חדשה</DialogTitle>
+            <DialogDescription>צור שגרת ברירת מחדל חדשה עבור רכב</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>שם/מספר רכב</Label>
-              <Input value={newVehicleName} onChange={(e) => setNewVehicleName(e.target.value)} placeholder="377" />
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-sm">שם השגרה</Label>
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder='לדוגמה: "ג - 435"'
+              />
             </div>
-            <div>
-              <Label>סוג רכב</Label>
-              <Input value={newVehicleType} onChange={(e) => setNewVehicleType(e.target.value)} placeholder="מרכבה 4" />
+            <div className="space-y-1">
+              <Label className="text-sm">רכב</Label>
+              <select
+                value={newTankId}
+                onChange={(e) => setNewTankId(e.target.value)}
+                className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">בחר רכב...</option>
+                {tanks.map(t => (
+                  <option key={t.id} value={t.id}>{t.designation}</option>
+                ))}
+              </select>
             </div>
-            <div>
-              <Label>קטגוריה</Label>
-              <Select value={newVehicleCategory} onValueChange={(v) => setNewVehicleCategory(v as VehicleCategory)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {VEHICLE_CATEGORIES.map(c => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              onClick={async () => {
-                if (!newVehicleName.trim()) return;
-                await addTank({
-                  designation: newVehicleName.trim(),
-                  type: newVehicleType.trim() || newVehicleCategory,
-                  vehicleCategory: newVehicleCategory,
-                  status: 'operational',
-                });
-                setNewVehicleName('');
-                setNewVehicleType('');
-                setNewVehicleCategory('tank');
-                setVehicleOpen(false);
-              }}
-              disabled={!newVehicleName.trim()}
-              className="w-full"
-            >
-              צור רכב
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>ביטול</Button>
+            <Button onClick={handleCreateTemplate} disabled={!newName || !newTankId}>
+              <Plus className="h-4 w-4 me-1" />
+              צור שגרה
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change log dialog */}
+      <Dialog open={showLogDialog} onOpenChange={setShowLogDialog}>
+        <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>יומן שינויים</DialogTitle>
+            <DialogDescription>כל השינויים שבוצעו בשגרות השיבוץ</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {(!changeLogs || changeLogs.length === 0) ? (
+              <p className="text-sm text-muted-foreground text-center py-4">אין שינויים</p>
+            ) : (
+              changeLogs.slice(0, 50).map((log) => {
+                const tmpl = templates.find(t => t.id === log.templateId);
+                const tmplName = tmpl?.name ?? '(נמחקה)';
+                let desc = '';
+                if (log.action === 'create') desc = `נוצרה שגרה "${tmplName}"`;
+                else if (log.action === 'delete') desc = `נמחקה שגרה "${tmplName}"`;
+                else if (log.action === 'assign') desc = `${log.soldierName ?? ''} שובץ ל${log.role ? getCrewRoleLabel(log.role) : 'צוות'} ב"${tmplName}"`;
+                else if (log.action === 'unassign') desc = `${log.soldierName ?? ''} הוסר מ${log.role ? getCrewRoleLabel(log.role) : 'צוות'} ב"${tmplName}"`;
+
+                return (
+                  <div key={log.id} className="flex items-start gap-2 text-xs border rounded px-3 py-2">
+                    <User className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                    <div className="flex-1">
+                      <div>{desc}</div>
+                      <div className="text-muted-foreground mt-0.5">
+                        {log.changedByName} · {new Date(log.timestamp).toLocaleString('he-IL')}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// ===== Template Form =====
-
-function TemplateForm({
-  tanks,
-  soldiers,
-  onSave,
-  initial,
-}: {
-  tanks: { id: string; designation: string }[];
-  soldiers: { id: string; firstName: string; lastName: string }[];
-  onSave: (data: { name: string; tankId: string; crewSlots: RoutineCrewSlot[]; notes?: string }) => Promise<void>;
-  initial?: { name: string; tankId: string; crewSlots: RoutineCrewSlot[]; notes?: string };
-}) {
-  const [name, setName] = useState(initial?.name ?? '');
-  const [tankId, setTankId] = useState(initial?.tankId ?? '');
-  const [slots, setSlots] = useState<RoutineCrewSlot[]>(initial?.crewSlots ?? []);
-  const [notes, setNotes] = useState(initial?.notes ?? '');
-  const [saving, setSaving] = useState(false);
-
-  const addSlot = () => {
-    setSlots([...slots, { role: 'driver' as CrewRole, soldierId: '' }]);
-  };
-
-  const updateSlot = (index: number, field: keyof RoutineCrewSlot, value: string) => {
-    const next = [...slots];
-    next[index] = { ...next[index], [field]: value } as RoutineCrewSlot;
-    setSlots(next);
-  };
-
-  const removeSlot = (index: number) => {
-    setSlots(slots.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = async () => {
-    if (!name.trim() || !tankId) return;
-    setSaving(true);
-    await onSave({
-      name: name.trim(),
-      tankId,
-      crewSlots: slots.filter(s => s.soldierId),
-      notes: notes.trim() || undefined,
-    });
-    setSaving(false);
-  };
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <Label>שם התבנית</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="שגרת אימון" />
-      </div>
-      <div>
-        <Label>רכב</Label>
-        <Select value={tankId} onValueChange={setTankId}>
-          <SelectTrigger><SelectValue placeholder="בחר רכב..." /></SelectTrigger>
-          <SelectContent>
-            {tanks.map(t => (
-              <SelectItem key={t.id} value={t.id}>{t.designation}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <Label>צוות</Label>
-          <Button type="button" variant="outline" size="sm" onClick={addSlot} className="gap-1">
-            <Plus className="h-3 w-3" />
-            הוסף
-          </Button>
-        </div>
-        <div className="space-y-2">
-          {slots.map((slot, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <Select value={slot.role} onValueChange={(v) => updateSlot(i, 'role', v)}>
-                <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CREW_ROLES.map(r => (
-                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={slot.soldierId || '__none__'} onValueChange={(v) => updateSlot(i, 'soldierId', v === '__none__' ? '' : v)}>
-                <SelectTrigger className="flex-1"><SelectValue placeholder="בחר חייל..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">בחר חייל...</SelectItem>
-                  {soldiers.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.firstName} {s.lastName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="ghost" size="icon" onClick={() => removeSlot(i)} aria-label="הסר">
-                <Trash2 className="h-3 w-3 text-destructive" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <Label>הערות</Label>
-        <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </div>
-
-      <Button onClick={handleSubmit} disabled={saving || !name.trim() || !tankId}>
-        {saving ? 'שומר...' : 'שמור'}
-      </Button>
-    </div>
-  );
-}
-
-function EditTemplateForm({
-  templateId,
-  templates,
-  tanks,
-  soldiers,
-  onSave,
-}: {
-  templateId: string;
-  templates: { id: string; name: string; tankId: string; crewSlots: RoutineCrewSlot[]; notes?: string }[];
-  tanks: { id: string; designation: string }[];
-  soldiers: { id: string; firstName: string; lastName: string }[];
-  onSave: (data: Partial<{ name: string; tankId: string; crewSlots: RoutineCrewSlot[]; notes?: string }>) => Promise<void>;
-}) {
-  const tmpl = templates.find(t => t.id === templateId);
-  if (!tmpl) return <p className="text-muted-foreground">תבנית לא נמצאה</p>;
-
-  return (
-    <TemplateForm
-      tanks={tanks}
-      soldiers={soldiers}
-      initial={{ name: tmpl.name, tankId: tmpl.tankId, crewSlots: tmpl.crewSlots, notes: tmpl.notes }}
-      onSave={onSave}
-    />
-  );
-}
-
-// ===== Apply Form =====
-
-function ApplyForm({
-  templateId,
-  onApply,
-}: {
-  templateId: string | null;
-  onApply: (templateId: string, start: string, end: string) => Promise<void>;
-}) {
-  const [startDT, setStartDT] = useState(noonToday());
-  const [endDT, setEndDT] = useState(noonTomorrow());
-  const [applying, setApplying] = useState(false);
-
-  if (!templateId) return null;
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        השיבוצים ייווצרו על פי התבנית עבור טווח התאריכים שנבחר.
-      </p>
-      <div>
-        <Label>התחלה</Label>
-        <Input type="datetime-local" value={startDT} onChange={(e) => setStartDT(e.target.value)} />
-      </div>
-      <div>
-        <Label>סיום</Label>
-        <Input type="datetime-local" value={endDT} onChange={(e) => setEndDT(e.target.value)} />
-      </div>
-      <Button
-        onClick={async () => {
-          setApplying(true);
-          await onApply(templateId, startDT, endDT);
-          setApplying(false);
-        }}
-        disabled={applying || !startDT || !endDT}
-        className="gap-2"
-      >
-        <Play className="h-4 w-4" />
-        {applying ? 'יוצר שיבוצים...' : 'צור שיבוצים'}
-      </Button>
     </div>
   );
 }

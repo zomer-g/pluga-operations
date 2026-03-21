@@ -204,6 +204,18 @@ export interface RoutineTemplate {
   updatedAt: string;
 }
 
+export interface RoutineChangeLog {
+  id: string;
+  templateId: string;
+  action: 'assign' | 'unassign' | 'create' | 'delete';
+  role?: CrewRole;
+  soldierId?: string;
+  soldierName?: string;
+  changedBy: string;
+  changedByName: string;
+  timestamp: string;
+}
+
 // ===== תוכן הדרכה (Training Content) =====
 
 export type TrainingContentType = 'document' | 'video' | 'presentation' | 'link' | 'other';

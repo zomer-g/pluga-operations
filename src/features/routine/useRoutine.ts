@@ -5,14 +5,18 @@ import {
   onSnapshot,
   setDoc,
   updateDoc,
-  deleteDoc,
-  getDoc,
+  query,
+  orderBy,
+  where,
+  getDocs,
+  writeBatch,
 } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db, auth } from '@/firebase';
 import { generateId, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
-import type { RoutineTemplate, RoutineCrewSlot } from '@/db/schema';
-import { addAssignment } from '@/hooks/useAssignment';
+import type { RoutineTemplate, RoutineCrewSlot, RoutineChangeLog, CrewRole } from '@/db/schema';
+
+// ===== Hooks =====
 
 export function useRoutineTemplates() {
   const [templates, setTemplates] = useState<RoutineTemplate[] | undefined>();
@@ -27,23 +31,38 @@ export function useRoutineTemplates() {
   return templates;
 }
 
-export function useRoutineTemplate(id: string | undefined) {
-  const [template, setTemplate] = useState<RoutineTemplate | undefined>();
+export function useRoutineChangeLogs(templateId?: string) {
+  const [logs, setLogs] = useState<RoutineChangeLog[] | undefined>();
 
   useEffect(() => {
-    if (!id) { setTemplate(undefined); return; }
-    const unsub = onSnapshot(doc(db, 'routineTemplates', id), (snap) => {
-      if (snap.exists()) {
-        setTemplate({ ...snap.data(), id: snap.id } as RoutineTemplate);
-      } else {
-        setTemplate(undefined);
-      }
+    const q = templateId
+      ? query(collection(db, 'routineChangeLogs'), where('templateId', '==', templateId), orderBy('timestamp', 'desc'))
+      : query(collection(db, 'routineChangeLogs'), orderBy('timestamp', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      setLogs(snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineChangeLog)));
     });
     return unsub;
-  }, [id]);
+  }, [templateId]);
 
-  return template;
+  return logs;
 }
+
+// ===== Change log helper =====
+
+async function logChange(data: Omit<RoutineChangeLog, 'id' | 'changedBy' | 'changedByName' | 'timestamp'>) {
+  const user = auth.currentUser;
+  const id = generateId();
+  const log: RoutineChangeLog = {
+    ...data,
+    id,
+    changedBy: user?.uid ?? 'unknown',
+    changedByName: user?.displayName ?? 'unknown',
+    timestamp: new Date().toISOString(),
+  };
+  await setDoc(doc(db, 'routineChangeLogs', id), stripUndefined(log as unknown as any));
+}
+
+// ===== Mutations =====
 
 export async function addRoutineTemplate(data: {
   name: string;
@@ -60,6 +79,8 @@ export async function addRoutineTemplate(data: {
     createdAt: now,
     updatedAt: now,
   }) as any);
+
+  await logChange({ templateId: id, action: 'create' });
   return id;
 }
 
@@ -73,36 +94,94 @@ export async function updateRoutineTemplate(id: string, data: Partial<RoutineTem
 
 export async function deleteRoutineTemplate(id: string) {
   await requireEditPermission('/routine');
-  await deleteDoc(doc(db, 'routineTemplates', id));
+
+  await logChange({ templateId: id, action: 'delete' });
+
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'routineTemplates', id));
+
+  // Clean up change logs for this template
+  const logsSnap = await getDocs(query(collection(db, 'routineChangeLogs'), where('templateId', '==', id)));
+  logsSnap.docs.forEach(d => batch.delete(d.ref));
+
+  await batch.commit();
 }
 
 /**
- * Apply a routine template to create real assignments for a date range.
- * Returns array of warnings from conflict detection.
+ * Assign a soldier to a role in a routine template.
+ * Removes any previous soldier from that role.
  */
-export async function applyRoutineToAssignments(
+export async function assignRoutineSlot(
   templateId: string,
-  startDateTime: string,
-  endDateTime: string
-): Promise<string[]> {
+  role: CrewRole | 'fifth',
+  soldierId: string,
+  soldierName: string,
+) {
   await requireEditPermission('/routine');
-  const snap = await getDoc(doc(db, 'routineTemplates', templateId));
-  if (!snap.exists()) throw new Error('Template not found');
+
+  // Get current template
+  const { getDoc: getDocFn } = await import('firebase/firestore');
+  const snap = await getDocFn(doc(db, 'routineTemplates', templateId));
+  if (!snap.exists()) return;
 
   const template = snap.data() as RoutineTemplate;
-  const allWarnings: string[] = [];
+  const crewSlots = [...(template.crewSlots ?? [])];
 
-  for (const slot of template.crewSlots) {
-    const result = await addAssignment({
-      soldierId: slot.soldierId,
-      type: 'tank_role',
-      tankId: template.tankId,
-      role: slot.role,
-      startDateTime,
-      endDateTime,
-    });
-    allWarnings.push(...result.warnings);
+  // Remove existing soldier in this role
+  const existingIdx = crewSlots.findIndex(s => s.role === role);
+  if (existingIdx >= 0) {
+    crewSlots.splice(existingIdx, 1);
   }
 
-  return allWarnings;
+  // Add new slot (skip for 'fifth' which has no CrewRole)
+  if (role !== 'fifth') {
+    crewSlots.push({ role: role as CrewRole, soldierId });
+  }
+
+  await updateDoc(doc(db, 'routineTemplates', templateId), {
+    crewSlots,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await logChange({
+    templateId,
+    action: 'assign',
+    role: role === 'fifth' ? undefined : role as CrewRole,
+    soldierId,
+    soldierName,
+  });
+}
+
+/**
+ * Unassign a soldier from a role in a routine template.
+ */
+export async function unassignRoutineSlot(
+  templateId: string,
+  role: CrewRole,
+  soldierId: string,
+  soldierName: string,
+) {
+  await requireEditPermission('/routine');
+
+  const { getDoc: getDocFn } = await import('firebase/firestore');
+  const snap = await getDocFn(doc(db, 'routineTemplates', templateId));
+  if (!snap.exists()) return;
+
+  const template = snap.data() as RoutineTemplate;
+  const crewSlots = (template.crewSlots ?? []).filter(
+    s => !(s.role === role && s.soldierId === soldierId)
+  );
+
+  await updateDoc(doc(db, 'routineTemplates', templateId), {
+    crewSlots,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await logChange({
+    templateId,
+    action: 'unassign',
+    role,
+    soldierId,
+    soldierName,
+  });
 }

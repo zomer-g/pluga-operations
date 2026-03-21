@@ -6,7 +6,7 @@ const COLLECTIONS = [
   'soldiers', 'equipmentTypes', 'equipmentAssignments', 'statusEntries',
   'tanks', 'tankCrewAssignments', 'platoons', 'squads', 'departments',
   'shampafEntries', 'shampafVacations', 'assignments', 'activations',
-  'routineTemplates', 'trainingContent', 'trainingTags', 'trainingCategories',
+  'routineTemplates', 'routineChangeLogs', 'trainingContent', 'trainingTags', 'trainingCategories',
   'donations', 'userPermissions', 'permissionGroups',
 ];
 
