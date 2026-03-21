@@ -73,9 +73,9 @@ export const useAppStore = create<AppState>()(
       setReportFieldVisibility: (reportType, field, visible) =>
         set((state) => ({
           reportPrefs: {
-            ...state.reportPrefs,
+            ...(state.reportPrefs ?? {}),
             [reportType]: {
-              ...state.reportPrefs[reportType],
+              ...(state.reportPrefs?.[reportType] ?? {}),
               [field]: visible,
             },
           },

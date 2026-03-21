@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { Pencil, Trash2, Plus, Save, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConflictBadge } from '@/components/assignment/ConflictBadge';
@@ -500,16 +500,16 @@ export function AssignmentTable({
               }
 
               return (
-                <>
+                <Fragment key={section.id}>
                   {section.label && (
-                    <tr key={`label_${section.id}`} className="bg-muted/20">
+                    <tr className="bg-muted/20">
                       <td colSpan={8} className="py-1.5 px-2 text-xs font-medium">
                         {section.label}
                       </td>
                     </tr>
                   )}
                   {section.assignments.map(renderAssignmentRow)}
-                </>
+                </Fragment>
               );
             })}
 

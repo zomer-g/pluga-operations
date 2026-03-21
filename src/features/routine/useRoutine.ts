@@ -6,7 +6,6 @@ import {
   setDoc,
   updateDoc,
   query,
-  orderBy,
   where,
   getDocs,
   writeBatch,
@@ -35,11 +34,13 @@ export function useRoutineChangeLogs(templateId?: string) {
   const [logs, setLogs] = useState<RoutineChangeLog[] | undefined>();
 
   useEffect(() => {
-    const q = templateId
-      ? query(collection(db, 'routineChangeLogs'), where('templateId', '==', templateId), orderBy('timestamp', 'desc'))
-      : query(collection(db, 'routineChangeLogs'), orderBy('timestamp', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setLogs(snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineChangeLog)));
+    const unsub = onSnapshot(collection(db, 'routineChangeLogs'), (snap) => {
+      let result = snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineChangeLog));
+      if (templateId) {
+        result = result.filter(l => l.templateId === templateId);
+      }
+      result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      setLogs(result);
     });
     return unsub;
   }, [templateId]);
