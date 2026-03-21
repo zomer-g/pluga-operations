@@ -193,6 +193,22 @@ service cloud.firestore {
       allow update, delete: if canWrite();
     }
 
+    // Routine departments
+    match /routineDepartments/{deptDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.name is string;
+      allow update, delete: if canWrite();
+    }
+
+    // Routine vehicles
+    match /routineVehicles/{vehicleDoc} {
+      allow read: if canRead();
+      allow create: if canWrite()
+        && request.resource.data.designation is string;
+      allow update, delete: if canWrite();
+    }
+
     // Routine templates
     match /routineTemplates/{templateDoc} {
       allow read: if canRead();

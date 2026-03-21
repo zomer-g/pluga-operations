@@ -187,6 +187,21 @@ export interface Assignment {
   notes?: string;
 }
 
+// ===== שגרה (Routine) — Independent departments & vehicles =====
+
+export interface RoutineDepartment {
+  id: string;
+  name: string;
+  order: number;
+}
+
+export interface RoutineVehicle {
+  id: string;
+  designation: string;
+  vehicleCategory: VehicleCategory;
+  departmentId?: string;
+}
+
 // ===== שגרה (Routine Templates) =====
 
 export interface RoutineCrewSlot {

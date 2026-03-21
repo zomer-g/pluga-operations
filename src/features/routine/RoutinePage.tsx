@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Plus, Trash2, Clock, User, FolderPlus } from 'lucide-react';
+import { Calendar, Plus, Clock, User, FolderPlus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,27 +16,27 @@ import { TankDiagram } from '@/components/tanks/TankDiagram';
 import {
   useRoutineTemplates,
   useRoutineChangeLogs,
+  useRoutineDepartments,
+  useRoutineVehicles,
   addRoutineTemplate,
   deleteRoutineTemplate,
+  addRoutineDepartment,
+  deleteRoutineDepartment,
+  addRoutineVehicle,
+  deleteRoutineVehicle,
   assignRoutineSlot,
   unassignRoutineSlot,
 } from './useRoutine';
-import { useTanks, useDepartments, addDepartment, deleteDepartment, addTank, deleteTank } from '@/hooks/useTanks';
 import { useSoldiers } from '@/hooks/useSoldiers';
 import { getCrewRoleLabel, ROLE_DISPLAY_ORDER, VEHICLE_CATEGORIES } from '@/lib/constants';
 import type { CrewRole, Assignment, VehicleCategory } from '@/db/schema';
 
 export function RoutinePage() {
   const templates = useRoutineTemplates();
-  const tanks = useTanks();
+  const vehicles = useRoutineVehicles();
   const soldiers = useSoldiers();
-  const departments = useDepartments();
+  const departments = useRoutineDepartments();
   const changeLogs = useRoutineChangeLogs();
-
-  // Create template dialog
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newTankId, setNewTankId] = useState('');
 
   // Department dialog
   const [showDeptDialog, setShowDeptDialog] = useState(false);
@@ -52,15 +52,15 @@ export function RoutinePage() {
   const [assignDialog, setAssignDialog] = useState<{
     open: boolean;
     templateId: string;
-    tankId: string;
+    vehicleId: string;
     role: CrewRole | 'fifth' | null;
-  }>({ open: false, templateId: '', tankId: '', role: null });
+  }>({ open: false, templateId: '', vehicleId: '', role: null });
   const [assignSoldierId, setAssignSoldierId] = useState('');
 
   // Change log dialog
   const [showLogDialog, setShowLogDialog] = useState(false);
 
-  if (!templates || !tanks || !soldiers) {
+  if (!templates || !vehicles || !soldiers) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -68,26 +68,26 @@ export function RoutinePage() {
     );
   }
 
-  // Group templates by department (via their tank's departmentId)
+  // Group templates by department (via their vehicle's departmentId)
   const templatesByDept = (() => {
     const deptOrder = new Map((departments ?? []).map((d, i) => [d.id, i]));
     const deptNameMap = new Map((departments ?? []).map(d => [d.id, d.name]));
 
     const sorted = [...templates].sort((a, b) => {
-      const tankA = tanks.find(t => t.id === a.tankId);
-      const tankB = tanks.find(t => t.id === b.tankId);
-      const deptA = tankA?.departmentId ? (deptOrder.get(tankA.departmentId) ?? 999) : 999;
-      const deptB = tankB?.departmentId ? (deptOrder.get(tankB.departmentId) ?? 999) : 999;
-      if (deptA !== deptB) return deptA - deptB;
-      return (tankA?.designation ?? '').localeCompare(tankB?.designation ?? '', 'he');
+      const vA = vehicles.find(v => v.id === a.tankId);
+      const vB = vehicles.find(v => v.id === b.tankId);
+      const dA = vA?.departmentId ? (deptOrder.get(vA.departmentId) ?? 999) : 999;
+      const dB = vB?.departmentId ? (deptOrder.get(vB.departmentId) ?? 999) : 999;
+      if (dA !== dB) return dA - dB;
+      return (vA?.designation ?? '').localeCompare(vB?.designation ?? '', 'he');
     });
 
     const groups: { deptId: string; deptName: string; templates: typeof templates }[] = [];
     const seen = new Set<string>();
 
     for (const tmpl of sorted) {
-      const tank = tanks.find(t => t.id === tmpl.tankId);
-      const deptId = tank?.departmentId || '__none__';
+      const vehicle = vehicles.find(v => v.id === tmpl.tankId);
+      const deptId = vehicle?.departmentId || '__none__';
       if (!seen.has(deptId)) {
         seen.add(deptId);
         groups.push({
@@ -102,7 +102,6 @@ export function RoutinePage() {
     return groups;
   })();
 
-  // Convert routine template crew slots to Assignment-like objects for TankDiagram
   const templateToAssignments = (tmpl: typeof templates[0]): Assignment[] => {
     return tmpl.crewSlots.map((slot) => ({
       id: `routine_${tmpl.id}_${slot.role}_${slot.soldierId}`,
@@ -115,40 +114,30 @@ export function RoutinePage() {
     }));
   };
 
-  const handleCreateTemplate = async () => {
-    if (!newName || !newTankId) return;
-    await addRoutineTemplate({ name: newName, tankId: newTankId, crewSlots: [] });
-    setShowCreateDialog(false);
-    setNewName('');
-    setNewTankId('');
-  };
-
   const handleCreateDept = async () => {
     if (!deptName) return;
-    await addDepartment(deptName, (departments?.length ?? 0) + 1);
+    await addRoutineDepartment(deptName, (departments?.length ?? 0) + 1);
     setShowDeptDialog(false);
     setDeptName('');
   };
 
   const handleCreateVehicle = async () => {
     if (!vehicleName) return;
-    const tankId = await addTank({
+    const vehicleId = await addRoutineVehicle({
       designation: vehicleName,
-      type: vehicleCategory === 'tank' ? 'מרכבה סימן 4' : 'רכב רגיל',
       vehicleCategory,
       departmentId: vehicleDeptId || undefined,
-      status: 'operational',
     });
     // Auto-create a routine template for this vehicle
-    await addRoutineTemplate({ name: vehicleName, tankId, crewSlots: [] });
+    await addRoutineTemplate({ name: vehicleName, tankId: vehicleId, crewSlots: [] });
     setShowVehicleDialog(false);
     setVehicleName('');
     setVehicleCategory('tank');
     setVehicleDeptId('');
   };
 
-  const openAssignDialog = (templateId: string, tankId: string, role: CrewRole | 'fifth') => {
-    setAssignDialog({ open: true, templateId, tankId, role });
+  const openAssignDialog = (templateId: string, vehicleId: string, role: CrewRole | 'fifth') => {
+    setAssignDialog({ open: true, templateId, vehicleId, role });
     setAssignSoldierId('');
   };
 
@@ -157,7 +146,7 @@ export function RoutinePage() {
     const soldier = soldiers.find(s => s.id === assignSoldierId);
     const soldierName = soldier ? `${soldier.firstName} ${soldier.lastName}` : '';
     await assignRoutineSlot(assignDialog.templateId, assignDialog.role, assignSoldierId, soldierName);
-    setAssignDialog({ open: false, templateId: '', tankId: '', role: null });
+    setAssignDialog({ open: false, templateId: '', vehicleId: '', role: null });
   };
 
   const handleUnassign = async (templateId: string, role: CrewRole, soldierId: string) => {
@@ -166,19 +155,14 @@ export function RoutinePage() {
     await unassignRoutineSlot(templateId, role, soldierId, soldierName);
   };
 
-  // Get filtered soldier options for the assign dialog based on role
   const getFilteredSoldiers = () => {
     const role = assignDialog.role;
     if (!role || role === 'fifth') return soldiers;
-
     if (role === 'commander') {
-      // For commander role: only commanders
       return soldiers.filter(s => s.trainedRole === 'commander');
     }
-
-    // For other roles: soldiers with matching trainedRole first, then commanders
     const matching = soldiers.filter(s => s.trainedRole === role);
-    const commanders = soldiers.filter(s => s.trainedRole === 'commander' && !matching.some(m => m.id === s.id));
+    const commanders = soldiers.filter(s => s.trainedRole === 'commander');
     return [...matching, ...commanders];
   };
 
@@ -195,13 +179,9 @@ export function RoutinePage() {
             <FolderPlus className="h-4 w-4 ml-1" />
             מחלקה חדשה
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setShowVehicleDialog(true)}>
+          <Button size="sm" onClick={() => setShowVehicleDialog(true)}>
             <Plus className="h-4 w-4 ml-1" />
             רכב חדש
-          </Button>
-          <Button size="sm" onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 ml-1" />
-            שגרה חדשה
           </Button>
         </div>
       </div>
@@ -222,7 +202,7 @@ export function RoutinePage() {
                 className="text-xs text-destructive h-6"
                 onClick={() => {
                   if (confirm(`למחוק את המחלקה "${group.deptName}"?`)) {
-                    deleteDepartment(group.deptId);
+                    deleteRoutineDepartment(group.deptId);
                   }
                 }}
               >
@@ -232,11 +212,10 @@ export function RoutinePage() {
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {group.templates.map((tmpl) => {
-              const tank = tanks.find(t => t.id === tmpl.tankId);
-              const isStandard = tank?.vehicleCategory === 'standard';
+              const vehicle = vehicles.find(v => v.id === tmpl.tankId);
+              const isStandard = vehicle?.vehicleCategory === 'standard';
               const assignments = templateToAssignments(tmpl);
 
-              // Sort by role display order
               const sortedAssignments = [...assignments].sort((a, b) => {
                 const orderA = a.role ? ROLE_DISPLAY_ORDER.indexOf(a.role) : ROLE_DISPLAY_ORDER.length;
                 const orderB = b.role ? ROLE_DISPLAY_ORDER.indexOf(b.role) : ROLE_DISPLAY_ORDER.length;
@@ -249,21 +228,16 @@ export function RoutinePage() {
                     <CardContent className="p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-bold">{tmpl.name}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
+                        <button
                           onClick={() => {
                             if (confirm(`למחוק את "${tmpl.name}" והרכב שלו?`)) {
-                            deleteRoutineTemplate(tmpl.id);
-                            deleteTank(tmpl.tankId);
-                          }
+                              deleteRoutineTemplate(tmpl.id);
+                              deleteRoutineVehicle(tmpl.tankId);
+                            }
                           }}
-                        >
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
+                          className="text-destructive hover:text-destructive/80 text-xs p-0.5"
+                        >✕</button>
                       </div>
-                      <div className="text-xs text-muted-foreground">{tank?.designation ?? ''}</div>
                       <div className="space-y-1">
                         {sortedAssignments.length === 0 && (
                           <p className="text-xs text-muted-foreground text-center py-2">אין צוות מוגדר</p>
@@ -277,9 +251,7 @@ export function RoutinePage() {
                                 <button
                                   onClick={() => handleUnassign(tmpl.id, a.role!, a.soldierId)}
                                   className="text-destructive hover:text-destructive/80 text-xs"
-                                >
-                                  ✕
-                                </button>
+                                >✕</button>
                               )}
                             </div>
                           );
@@ -305,29 +277,23 @@ export function RoutinePage() {
                   <CardContent className="p-2">
                     <div className="flex items-center justify-between px-2 pt-1">
                       <span className="text-xs font-medium text-muted-foreground">{tmpl.name}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
+                      <button
                         onClick={() => {
                           if (confirm(`למחוק את "${tmpl.name}" והרכב שלו?`)) {
                             deleteRoutineTemplate(tmpl.id);
-                            deleteTank(tmpl.tankId);
+                            deleteRoutineVehicle(tmpl.tankId);
                           }
                         }}
-                      >
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
+                        className="text-destructive hover:text-destructive/80 text-xs p-0.5"
+                      >✕</button>
                     </div>
                     <TankDiagram
                       tankId={tmpl.tankId}
-                      designation={tank?.designation ?? tmpl.name}
+                      designation={vehicle?.designation ?? tmpl.name}
                       assignments={sortedAssignments}
                       soldiers={soldiers}
                       onAssignSlot={(role) => openAssignDialog(tmpl.id, tmpl.tankId, role)}
                       onUnassign={(assignmentId) => {
-                        // Parse the assignment ID to find the slot
-                        // Format: routine_{templateId}_{role}_{soldierId}
                         const parts = assignmentId.split('_');
                         const role = parts[2] as CrewRole;
                         const soldierId = parts.slice(3).join('_');
@@ -346,7 +312,7 @@ export function RoutinePage() {
         <div className="text-center py-12 text-muted-foreground">
           <Calendar className="h-12 w-12 mx-auto mb-3 opacity-40" />
           <p>אין שגרות מוגדרות</p>
-          <p className="text-xs mt-1">צור מחלקה, רכב ושגרה להתחלה</p>
+          <p className="text-xs mt-1">צור מחלקה, רכב להתחלה</p>
         </div>
       )}
 
@@ -354,7 +320,7 @@ export function RoutinePage() {
       <Dialog
         open={assignDialog.open}
         onOpenChange={(open) => {
-          if (!open) setAssignDialog({ open: false, templateId: '', tankId: '', role: null });
+          if (!open) setAssignDialog({ open: false, templateId: '', vehicleId: '', role: null });
         }}
       >
         <DialogContent>
@@ -365,7 +331,7 @@ export function RoutinePage() {
                 ? `תפקיד: ${getCrewRoleLabel(assignDialog.role as CrewRole)}`
                 : 'איש צוות'}
               {' | '}
-              רכב: {tanks.find(t => t.id === assignDialog.tankId)?.designation ?? '---'}
+              רכב: {vehicles.find(v => v.id === assignDialog.vehicleId)?.designation ?? '---'}
             </DialogDescription>
           </DialogHeader>
           <div>
@@ -373,7 +339,7 @@ export function RoutinePage() {
             <select
               value={assignSoldierId}
               onChange={(e) => setAssignSoldierId(e.target.value)}
-              className="mt-1 h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="mt-1 h-11 w-full rounded-md border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">בחר...</option>
               {getFilteredSoldiers().map((s) => (
@@ -395,51 +361,11 @@ export function RoutinePage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignDialog({ open: false, templateId: '', tankId: '', role: null })}>
+            <Button variant="outline" onClick={() => setAssignDialog({ open: false, templateId: '', vehicleId: '', role: null })}>
               ביטול
             </Button>
             <Button onClick={handleAssign} disabled={!assignSoldierId}>
               שבץ
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create template dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>שגרה חדשה</DialogTitle>
-            <DialogDescription>צור שגרת ברירת מחדל חדשה עבור רכב</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label className="text-sm">שם השגרה</Label>
-              <Input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder='לדוגמה: "ג - 435"'
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-sm">רכב</Label>
-              <select
-                value={newTankId}
-                onChange={(e) => setNewTankId(e.target.value)}
-                className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">בחר רכב...</option>
-                {tanks.map(t => (
-                  <option key={t.id} value={t.id}>{t.designation}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>ביטול</Button>
-            <Button onClick={handleCreateTemplate} disabled={!newName || !newTankId}>
-              <Plus className="h-4 w-4 me-1" />
-              צור שגרה
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -450,7 +376,7 @@ export function RoutinePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>מחלקה חדשה</DialogTitle>
-            <DialogDescription>צור מחלקה חדשה לקיבוץ רכבים</DialogDescription>
+            <DialogDescription>צור מחלקה חדשה לקיבוץ רכבים בשגרה</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
@@ -477,7 +403,7 @@ export function RoutinePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>רכב חדש</DialogTitle>
-            <DialogDescription>הוסף רכב חדש למערכת</DialogDescription>
+            <DialogDescription>הוסף רכב חדש לשגרה</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
@@ -485,7 +411,7 @@ export function RoutinePage() {
               <Input
                 value={vehicleName}
                 onChange={(e) => setVehicleName(e.target.value)}
-                placeholder='לדוגמה: "413 - נ4"'
+                placeholder='לדוגמה: "ג - 435"'
               />
             </div>
             <div className="space-y-1">
@@ -493,7 +419,7 @@ export function RoutinePage() {
               <select
                 value={vehicleCategory}
                 onChange={(e) => setVehicleCategory(e.target.value as VehicleCategory)}
-                className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="h-11 w-full rounded-md border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 {VEHICLE_CATEGORIES.map((vc) => (
                   <option key={vc.value} value={vc.value}>{vc.label}</option>
@@ -510,7 +436,7 @@ export function RoutinePage() {
               <select
                 value={vehicleDeptId}
                 onChange={(e) => setVehicleDeptId(e.target.value)}
-                className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="h-11 w-full rounded-md border border-input px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">ללא מחלקה</option>
                 {(departments ?? []).map(d => (

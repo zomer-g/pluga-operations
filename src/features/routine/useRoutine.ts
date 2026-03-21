@@ -13,9 +13,96 @@ import {
 import { db, auth } from '@/firebase';
 import { generateId, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
-import type { RoutineTemplate, RoutineCrewSlot, RoutineChangeLog, CrewRole } from '@/db/schema';
+import type {
+  RoutineTemplate,
+  RoutineCrewSlot,
+  RoutineChangeLog,
+  RoutineDepartment,
+  RoutineVehicle,
+  VehicleCategory,
+  CrewRole,
+} from '@/db/schema';
 
-// ===== Hooks =====
+// ===== Routine Departments =====
+
+export function useRoutineDepartments() {
+  const [departments, setDepartments] = useState<RoutineDepartment[] | undefined>();
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'routineDepartments'), (snap) => {
+      const result = snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineDepartment));
+      result.sort((a, b) => a.order - b.order);
+      setDepartments(result);
+    });
+    return unsub;
+  }, []);
+
+  return departments;
+}
+
+export async function addRoutineDepartment(name: string, order: number = 0): Promise<string> {
+  await requireEditPermission('/routine');
+  const id = generateId();
+  await setDoc(doc(db, 'routineDepartments', id), { id, name, order });
+  return id;
+}
+
+export async function deleteRoutineDepartment(id: string): Promise<void> {
+  await requireEditPermission('/routine');
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'routineDepartments', id));
+  // Clear departmentId from vehicles in this department
+  const vehicleSnap = await getDocs(query(collection(db, 'routineVehicles'), where('departmentId', '==', id)));
+  for (const d of vehicleSnap.docs) {
+    batch.update(d.ref, { departmentId: '' });
+  }
+  await batch.commit();
+}
+
+// ===== Routine Vehicles =====
+
+export function useRoutineVehicles() {
+  const [vehicles, setVehicles] = useState<RoutineVehicle[] | undefined>();
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'routineVehicles'), (snap) => {
+      setVehicles(snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineVehicle)));
+    });
+    return unsub;
+  }, []);
+
+  return vehicles;
+}
+
+export async function addRoutineVehicle(data: {
+  designation: string;
+  vehicleCategory: VehicleCategory;
+  departmentId?: string;
+}): Promise<string> {
+  await requireEditPermission('/routine');
+  const id = generateId();
+  await setDoc(doc(db, 'routineVehicles', id), stripUndefined({ ...data, id }) as any);
+  return id;
+}
+
+export async function deleteRoutineVehicle(id: string): Promise<void> {
+  await requireEditPermission('/routine');
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'routineVehicles', id));
+  // Delete routine templates for this vehicle
+  const tmplSnap = await getDocs(query(collection(db, 'routineTemplates'), where('tankId', '==', id)));
+  for (const d of tmplSnap.docs) {
+    batch.delete(d.ref);
+  }
+  // Delete change logs for those templates
+  for (const d of tmplSnap.docs) {
+    const logSnap = await getDocs(query(collection(db, 'routineChangeLogs'), where('templateId', '==', d.id)));
+    logSnap.docs.forEach(l => batch.delete(l.ref));
+  }
+  await batch.commit();
+}
+
+// ===== Routine Templates =====
 
 export function useRoutineTemplates() {
   const [templates, setTemplates] = useState<RoutineTemplate[] | undefined>();
@@ -30,20 +117,17 @@ export function useRoutineTemplates() {
   return templates;
 }
 
-export function useRoutineChangeLogs(templateId?: string) {
+export function useRoutineChangeLogs() {
   const [logs, setLogs] = useState<RoutineChangeLog[] | undefined>();
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'routineChangeLogs'), (snap) => {
-      let result = snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineChangeLog));
-      if (templateId) {
-        result = result.filter(l => l.templateId === templateId);
-      }
+      const result = snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineChangeLog));
       result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
       setLogs(result);
     });
     return unsub;
-  }, [templateId]);
+  }, []);
 
   return logs;
 }
@@ -63,7 +147,7 @@ async function logChange(data: Omit<RoutineChangeLog, 'id' | 'changedBy' | 'chan
   await setDoc(doc(db, 'routineChangeLogs', id), stripUndefined(log as unknown as any));
 }
 
-// ===== Mutations =====
+// ===== Template Mutations =====
 
 export async function addRoutineTemplate(data: {
   name: string;
@@ -101,17 +185,12 @@ export async function deleteRoutineTemplate(id: string) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'routineTemplates', id));
 
-  // Clean up change logs for this template
   const logsSnap = await getDocs(query(collection(db, 'routineChangeLogs'), where('templateId', '==', id)));
   logsSnap.docs.forEach(d => batch.delete(d.ref));
 
   await batch.commit();
 }
 
-/**
- * Assign a soldier to a role in a routine template.
- * Removes any previous soldier from that role.
- */
 export async function assignRoutineSlot(
   templateId: string,
   role: CrewRole | 'fifth',
@@ -120,7 +199,6 @@ export async function assignRoutineSlot(
 ) {
   await requireEditPermission('/routine');
 
-  // Get current template
   const { getDoc: getDocFn } = await import('firebase/firestore');
   const snap = await getDocFn(doc(db, 'routineTemplates', templateId));
   if (!snap.exists()) return;
@@ -128,13 +206,11 @@ export async function assignRoutineSlot(
   const template = snap.data() as RoutineTemplate;
   const crewSlots = [...(template.crewSlots ?? [])];
 
-  // Remove existing soldier in this role
   const existingIdx = crewSlots.findIndex(s => s.role === role);
   if (existingIdx >= 0) {
     crewSlots.splice(existingIdx, 1);
   }
 
-  // Add new slot (skip for 'fifth' which has no CrewRole)
   if (role !== 'fifth') {
     crewSlots.push({ role: role as CrewRole, soldierId });
   }
@@ -153,9 +229,6 @@ export async function assignRoutineSlot(
   });
 }
 
-/**
- * Unassign a soldier from a role in a routine template.
- */
 export async function unassignRoutineSlot(
   templateId: string,
   role: CrewRole,
