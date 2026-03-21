@@ -14,6 +14,25 @@ import { generateId, stripUndefined } from '@/lib/utils';
 import type { PermissionGroup, UserPermission, PermissionAction } from '@/db/schema';
 import { ALL_PAGE_ROUTES } from '@/lib/constants';
 
+// ===== Migration helper =====
+
+/** Normalize a UserPermission doc — migrate old `groupId` to `groupIds[]` */
+function normalizeUserPerm(data: Record<string, unknown>, id: string): UserPermission {
+  const raw = data as unknown as UserPermission & { groupId?: string };
+  let groupIds = raw.groupIds;
+  if (!groupIds || !Array.isArray(groupIds)) {
+    // Migrate from legacy single groupId
+    groupIds = raw.groupId ? [raw.groupId] : [];
+  }
+  return {
+    id,
+    email: raw.email ?? '',
+    displayName: raw.displayName ?? '',
+    groupIds,
+    customPageOverrides: raw.customPageOverrides,
+  };
+}
+
 // ===== Hooks =====
 
 export function usePermissionGroups() {
@@ -34,7 +53,7 @@ export function useUserPermissions() {
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'userPermissions'), (snap) => {
-      setPerms(snap.docs.map(d => ({ ...d.data(), id: d.id } as UserPermission)));
+      setPerms(snap.docs.map(d => normalizeUserPerm(d.data(), d.id)));
     });
     return unsub;
   }, []);
@@ -50,7 +69,7 @@ export function useCurrentUserPermission() {
     if (!user) { setPerm(null); return; }
     const unsub = onSnapshot(doc(db, 'userPermissions', user.sub), (snap) => {
       if (snap.exists()) {
-        setPerm({ ...snap.data(), id: snap.id } as UserPermission);
+        setPerm(normalizeUserPerm(snap.data(), snap.id));
       } else {
         setPerm(null);
       }
@@ -59,6 +78,32 @@ export function useCurrentUserPermission() {
   }, [user]);
 
   return perm;
+}
+
+/** Get the highest permission level for a route across all user groups */
+function getHighestPermission(
+  userPerm: UserPermission,
+  groups: PermissionGroup[],
+  route: string,
+): PermissionAction | null {
+  // Check custom overrides first
+  const customAction = userPerm.customPageOverrides?.[route];
+  if (customAction) return customAction;
+
+  // Check all groups the user belongs to — take the highest permission
+  const levels: Record<PermissionAction, number> = { view: 1, edit: 2, admin: 3 };
+  let highest: PermissionAction | null = null;
+
+  for (const gId of userPerm.groupIds) {
+    const group = groups.find(g => g.id === gId);
+    if (!group) continue;
+    const action = group.pagePermissions[route];
+    if (action && (!highest || levels[action] > levels[highest])) {
+      highest = action;
+    }
+  }
+
+  return highest;
 }
 
 export function useCanAccessPage(route: string): boolean | undefined {
@@ -70,14 +115,8 @@ export function useCanAccessPage(route: string): boolean | undefined {
   // No permission doc = allow all (first user / admin bootstrap)
   if (userPerm === null) return true;
 
-  // Check custom override first
-  if (userPerm.customPageOverrides?.[route]) return true;
-
-  // Find group
-  const group = groups.find(g => g.id === userPerm.groupId);
-  if (!group) return true; // No group found = allow (safety)
-
-  return !!group.pagePermissions[route];
+  const perm = getHighestPermission(userPerm, groups, route);
+  return !!perm;
 }
 
 export function useHasEditAccess(route: string): boolean | undefined {
@@ -87,16 +126,8 @@ export function useHasEditAccess(route: string): boolean | undefined {
   if (userPerm === undefined || groups === undefined) return undefined;
   if (userPerm === null) return true;
 
-  // Check custom override
-  const customAction = userPerm.customPageOverrides?.[route];
-  if (customAction === 'edit' || customAction === 'admin') return true;
-
-  // Check group
-  const group = groups.find(g => g.id === userPerm.groupId);
-  if (!group) return true;
-
-  const action = group.pagePermissions[route];
-  return action === 'edit' || action === 'admin';
+  const perm = getHighestPermission(userPerm, groups, route);
+  return perm === 'edit' || perm === 'admin';
 }
 
 export function useIsAdmin(): boolean | undefined {
@@ -106,11 +137,8 @@ export function useIsAdmin(): boolean | undefined {
   if (userPerm === undefined || groups === undefined) return undefined;
   if (userPerm === null) return true; // No perm doc = first user = admin
 
-  const group = groups.find(g => g.id === userPerm.groupId);
-  if (!group) return true;
-
-  // Admin if permissions page has admin access
-  return group.pagePermissions['/permissions'] === 'admin';
+  const perm = getHighestPermission(userPerm, groups, '/permissions');
+  return perm === 'admin';
 }
 
 // ===== Mutations =====
@@ -147,7 +175,17 @@ export async function ensureUserPermission(user: { sub: string; email: string; n
   const userPermRef = doc(db, 'userPermissions', user.sub);
   const { getDoc: getDocFn } = await import('firebase/firestore');
   const existingDoc = await getDocFn(userPermRef);
-  if (existingDoc.exists()) return;
+
+  if (existingDoc.exists()) {
+    // Migrate old single groupId to groupIds[] if needed
+    const data = existingDoc.data() as Record<string, unknown>;
+    if (!data.groupIds && data.groupId) {
+      await updateDoc(userPermRef, {
+        groupIds: [data.groupId],
+      });
+    }
+    return;
+  }
 
   // Check if any permission groups exist
   const groupsSnap = await getDocs(collection(db, 'permissionGroups'));
@@ -198,11 +236,11 @@ export async function ensureUserPermission(user: { sub: string; email: string; n
     }
   }
 
-  // Create user permission doc
+  // Create user permission doc with groupIds array
   await setDoc(userPermRef, {
     id: user.sub,
     email: user.email,
     displayName: user.name,
-    groupId,
+    groupIds: [groupId],
   });
 }

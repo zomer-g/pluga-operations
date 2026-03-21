@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { BookOpen, Plus, Search, Trash2, Edit3, ExternalLink, FileText, Video, Presentation, Link2, Tag, FolderOpen } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import { BookOpen, Plus, Search, Trash2, Edit3, ExternalLink, FileText, Video, Presentation, Link2, Tag, FolderOpen, Upload, File as FileIcon } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,8 @@ import {
 } from './useTraining';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { TRAINING_CONTENT_TYPES, getTrainingContentTypeLabel } from '@/lib/constants';
+import { uploadFile } from '@/lib/storage';
+import { generateId } from '@/lib/utils';
 import type { TrainingContentType, TrainingContent as TC } from '@/db/schema';
 
 const CONTENT_TYPE_ICONS: Record<TrainingContentType, typeof FileText> = {
@@ -217,6 +219,17 @@ export function TrainingPage() {
                     {viewItem.contentBody}
                   </div>
                 )}
+                {viewItem.fileUrl && (
+                  <a
+                    href={viewItem.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-primary hover:underline bg-card border rounded px-3 py-2"
+                  >
+                    <FileIcon className="h-4 w-4" />
+                    הורד קובץ מצורף
+                  </a>
+                )}
                 {viewItem.externalUrl && (
                   <a
                     href={viewItem.externalUrl}
@@ -304,6 +317,7 @@ function ContentForm({
     description?: string;
     contentType: TrainingContentType;
     contentBody?: string;
+    fileUrl?: string;
     externalUrl?: string;
     tags: string[];
     category: string;
@@ -317,6 +331,10 @@ function ContentForm({
   const [selectedTags, setSelectedTags] = useState<string[]>(initial?.tags ?? []);
   const [category, setCategory] = useState(initial?.category ?? '');
   const [saving, setSaving] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [existingFileUrl, setExistingFileUrl] = useState(initial?.fileUrl ?? '');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const toggleTag = (name: string) => {
     setSelectedTags(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name]);
@@ -325,16 +343,43 @@ function ContentForm({
   const handleSubmit = async () => {
     if (!title.trim() || !category) return;
     setSaving(true);
+
+    let fileUrl: string | undefined = existingFileUrl || undefined;
+
+    // Upload file if selected
+    if (file) {
+      try {
+        const fileId = generateId();
+        const storagePath = `training/${fileId}/${file.name}`;
+        fileUrl = await uploadFile(file, storagePath, (p) => setUploadProgress(p));
+      } catch (err) {
+        console.error('File upload failed:', err);
+        setSaving(false);
+        setUploadProgress(null);
+        return;
+      }
+    }
+
     await onSave({
       title: title.trim(),
       description: description.trim() || undefined,
       contentType,
       contentBody: contentBody.trim() || undefined,
+      fileUrl,
       externalUrl: externalUrl.trim() || undefined,
       tags: selectedTags,
       category,
     });
     setSaving(false);
+    setUploadProgress(null);
+  };
+
+  const acceptTypes = {
+    document: '.pdf,.doc,.docx,.txt,.rtf,.odt',
+    video: 'video/*',
+    presentation: '.ppt,.pptx,.odp,.pdf',
+    other: '*',
+    link: '',
   };
 
   return (
@@ -385,6 +430,80 @@ function ContentForm({
           ))}
         </div>
       </div>
+
+      {/* File Upload */}
+      {contentType !== 'link' && (
+        <div>
+          <Label>העלאת קובץ</Label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={acceptTypes[contentType] || '*'}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) setFile(f);
+            }}
+            className="hidden"
+          />
+          <div className="mt-1 space-y-2">
+            {existingFileUrl && !file && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card border rounded px-3 py-2">
+                <FileIcon className="h-4 w-4 shrink-0" />
+                <span className="truncate flex-1">קובץ קיים</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExistingFileUrl('')}
+                  className="text-destructive text-xs"
+                >
+                  הסר
+                </Button>
+              </div>
+            )}
+            {file && (
+              <div className="flex items-center gap-2 text-sm text-foreground bg-card border rounded px-3 py-2">
+                <FileIcon className="h-4 w-4 shrink-0" />
+                <span className="truncate flex-1">{file.name}</span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {(file.size / 1024 / 1024).toFixed(1)} MB
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                  className="text-destructive text-xs"
+                >
+                  הסר
+                </Button>
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="gap-2"
+            >
+              <Upload className="h-3 w-3" />
+              {file ? 'החלף קובץ' : 'בחר קובץ'}
+            </Button>
+          </div>
+          {uploadProgress !== null && (
+            <div className="mt-2">
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{uploadProgress}% הועלה</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {(contentType === 'link' || contentType === 'video') && (
         <div>
           <Label>קישור URL</Label>
@@ -396,7 +515,7 @@ function ContentForm({
         <Textarea value={contentBody} onChange={(e) => setContentBody(e.target.value)} rows={5} />
       </div>
       <Button onClick={handleSubmit} disabled={saving || !title.trim() || !category}>
-        {saving ? 'שומר...' : 'שמור'}
+        {saving ? (uploadProgress !== null ? `מעלה... ${uploadProgress}%` : 'שומר...') : 'שמור'}
       </Button>
     </div>
   );

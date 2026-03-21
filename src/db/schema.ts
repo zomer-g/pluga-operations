@@ -255,7 +255,9 @@ export interface UserPermission {
   id: string;
   email: string;
   displayName: string;
-  groupId: string;
+  /** @deprecated Use groupIds instead */
+  groupId?: string;
+  groupIds: string[];
   customPageOverrides?: Record<string, PermissionAction>;
 }
 

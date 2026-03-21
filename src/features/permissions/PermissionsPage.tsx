@@ -12,13 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+// Select components used in GroupEditor only indirectly via radio inputs
 import {
   usePermissionGroups,
   useUserPermissions,
@@ -281,13 +275,26 @@ function UsersTab() {
     return <div className="text-center py-8 text-muted-foreground">טוען...</div>;
   }
 
-  const handleChangeGroup = async (userId: string, groupId: string) => {
+  const handleToggleGroup = async (userId: string, groupId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
+
+    const currentGroupIds = user.groupIds ?? [];
+    let newGroupIds: string[];
+
+    if (currentGroupIds.includes(groupId)) {
+      // Remove group (but keep at least one)
+      newGroupIds = currentGroupIds.filter(id => id !== groupId);
+      if (newGroupIds.length === 0) return; // Must have at least one group
+    } else {
+      // Add group
+      newGroupIds = [...currentGroupIds, groupId];
+    }
+
     await setUserPermission(userId, {
       email: user.email,
       displayName: user.displayName,
-      groupId,
+      groupIds: newGroupIds,
     });
   };
 
@@ -302,7 +309,7 @@ function UsersTab() {
               <tr className="border-b">
                 <th className="text-right py-3 pe-4 font-medium text-foreground">שם</th>
                 <th className="text-right py-3 pe-4 font-medium text-foreground">אימייל</th>
-                <th className="text-right py-3 pe-4 font-medium text-foreground w-48">קבוצה</th>
+                <th className="text-right py-3 pe-4 font-medium text-foreground">קבוצות</th>
               </tr>
             </thead>
             <tbody>
@@ -311,21 +318,24 @@ function UsersTab() {
                   <td className="py-3 pe-4 text-foreground">{user.displayName}</td>
                   <td className="py-3 pe-4 text-muted-foreground">{user.email}</td>
                   <td className="py-3 pe-4">
-                    <Select
-                      value={user.groupId}
-                      onValueChange={(val) => handleChangeGroup(user.id, val)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {groups.map(g => (
-                          <SelectItem key={g.id} value={g.id}>
+                    <div className="flex flex-wrap gap-2">
+                      {groups.map(g => {
+                        const isActive = (user.groupIds ?? []).includes(g.id);
+                        return (
+                          <button
+                            key={g.id}
+                            onClick={() => handleToggleGroup(user.id, g.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                              isActive
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-card text-muted-foreground border-border hover:border-primary/50'
+                            }`}
+                          >
                             {g.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </td>
                 </tr>
               ))}

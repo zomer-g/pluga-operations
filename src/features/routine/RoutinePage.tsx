@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Plus, Trash2, Play, Edit3 } from 'lucide-react';
+import { Calendar, Plus, Trash2, Play, Edit3, Truck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,11 +25,11 @@ import {
   deleteRoutineTemplate,
   applyRoutineToAssignments,
 } from './useRoutine';
-import { useTanks } from '@/hooks/useTanks';
+import { useTanks, addTank } from '@/hooks/useTanks';
 import { useSoldiers } from '@/hooks/useSoldiers';
-import { getCrewRoleLabel, CREW_ROLES } from '@/lib/constants';
+import { getCrewRoleLabel, CREW_ROLES, VEHICLE_CATEGORIES } from '@/lib/constants';
 import { noonToday, noonTomorrow } from '@/lib/utils';
-import type { RoutineCrewSlot, CrewRole } from '@/db/schema';
+import type { RoutineCrewSlot, CrewRole, VehicleCategory } from '@/db/schema';
 
 export function RoutinePage() {
   const templates = useRoutineTemplates();
@@ -38,6 +38,10 @@ export function RoutinePage() {
   const [addOpen, setAddOpen] = useState(false);
   const [applyOpen, setApplyOpen] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [vehicleOpen, setVehicleOpen] = useState(false);
+  const [newVehicleName, setNewVehicleName] = useState('');
+  const [newVehicleType, setNewVehicleType] = useState('');
+  const [newVehicleCategory, setNewVehicleCategory] = useState<VehicleCategory>('tank');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   if (!templates || !tanks || !soldiers) {
@@ -65,7 +69,12 @@ export function RoutinePage() {
           <Calendar className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold">שגרת שיבוץ</h1>
         </div>
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setVehicleOpen(true)} className="gap-2">
+            <Truck className="h-4 w-4" />
+            רכב חדש
+          </Button>
+          <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
@@ -86,6 +95,7 @@ export function RoutinePage() {
             />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <p className="text-muted-foreground text-sm">
@@ -218,6 +228,55 @@ export function RoutinePage() {
               }}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Vehicle Dialog */}
+      <Dialog open={vehicleOpen} onOpenChange={setVehicleOpen}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>צור רכב חדש</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>שם/מספר רכב</Label>
+              <Input value={newVehicleName} onChange={(e) => setNewVehicleName(e.target.value)} placeholder="377" />
+            </div>
+            <div>
+              <Label>סוג רכב</Label>
+              <Input value={newVehicleType} onChange={(e) => setNewVehicleType(e.target.value)} placeholder="מרכבה 4" />
+            </div>
+            <div>
+              <Label>קטגוריה</Label>
+              <Select value={newVehicleCategory} onValueChange={(v) => setNewVehicleCategory(v as VehicleCategory)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {VEHICLE_CATEGORIES.map(c => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              onClick={async () => {
+                if (!newVehicleName.trim()) return;
+                await addTank({
+                  designation: newVehicleName.trim(),
+                  type: newVehicleType.trim() || newVehicleCategory,
+                  vehicleCategory: newVehicleCategory,
+                  status: 'operational',
+                });
+                setNewVehicleName('');
+                setNewVehicleType('');
+                setNewVehicleCategory('tank');
+                setVehicleOpen(false);
+              }}
+              disabled={!newVehicleName.trim()}
+              className="w-full"
+            >
+              צור רכב
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

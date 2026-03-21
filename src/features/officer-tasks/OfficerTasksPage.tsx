@@ -1,11 +1,28 @@
 import { useState, useMemo } from 'react';
-import { ClipboardList, Plus, Calendar } from 'lucide-react';
+import { ClipboardList, Plus, Calendar, Truck } from 'lucide-react';
 import { useAssignments, deleteAssignment, addAssignment } from '@/hooks/useAssignment';
 import { useSoldiers } from '@/hooks/useSoldiers';
-import { useTanks } from '@/hooks/useTanks';
+import { useTanks, addTank } from '@/hooks/useTanks';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { VEHICLE_CATEGORIES } from '@/lib/constants';
 import { TaskCard } from './components/TaskCard';
 import { QuickAssignSheet } from './components/QuickAssignSheet';
-import type { Assignment, CrewRole } from '@/db/schema';
+import type { Assignment, CrewRole, VehicleCategory } from '@/db/schema';
 
 export function OfficerTasksPage() {
   const assignments = useAssignments();
@@ -14,6 +31,10 @@ export function OfficerTasksPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [reassignData, setReassignData] = useState<Assignment | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [vehicleOpen, setVehicleOpen] = useState(false);
+  const [newVehicleName, setNewVehicleName] = useState('');
+  const [newVehicleType, setNewVehicleType] = useState('');
+  const [newVehicleCategory, setNewVehicleCategory] = useState<VehicleCategory>('tank');
 
   // Filter to future assignments only
   const futureAssignments = useMemo(() => {
@@ -24,13 +45,11 @@ export function OfficerTasksPage() {
       .sort((a, b) => a.startDateTime.localeCompare(b.startDateTime));
   }, [assignments]);
 
-  if (!futureAssignments || !soldiers || !tanks) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  // Show page structure even while loading
+  const isLoading = futureAssignments === undefined || soldiers === undefined || tanks === undefined;
+  const safeAssignments = futureAssignments ?? [];
+  const safeSoldiers = soldiers ?? [];
+  const safeTanks = tanks ?? [];
 
   const handleComplete = async (id: string) => {
     await deleteAssignment(id);
@@ -51,7 +70,6 @@ export function OfficerTasksPage() {
     startDateTime: string;
     endDateTime: string;
   }) => {
-    // If reassigning, delete old first
     if (reassignData) {
       await deleteAssignment(reassignData.id);
       setReassignData(null);
@@ -61,16 +79,32 @@ export function OfficerTasksPage() {
     setTimeout(() => setMessage(null), 3000);
   };
 
+  const handleCreateVehicle = async () => {
+    if (!newVehicleName.trim()) return;
+    await addTank({
+      designation: newVehicleName.trim(),
+      type: newVehicleType.trim() || newVehicleCategory,
+      vehicleCategory: newVehicleCategory,
+      status: 'operational',
+    });
+    setNewVehicleName('');
+    setNewVehicleType('');
+    setNewVehicleCategory('tank');
+    setVehicleOpen(false);
+    setMessage('רכב נוצר בהצלחה');
+    setTimeout(() => setMessage(null), 3000);
+  };
+
   // Group by date
   const grouped = useMemo(() => {
     const groups: Record<string, Assignment[]> = {};
-    for (const a of futureAssignments) {
+    for (const a of safeAssignments) {
       const dateKey = a.startDateTime.split('T')[0] ?? '';
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey]!.push(a);
     }
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [futureAssignments]);
+  }, [safeAssignments]);
 
   const formatDateLabel = (dateStr: string) => {
     const d = new Date(dateStr + 'T00:00:00');
@@ -93,9 +127,15 @@ export function OfficerTasksPage() {
             <ClipboardList className="h-5 w-5 text-primary" />
             <h1 className="text-lg font-bold">משימות קצין תורן</h1>
           </div>
-          <span className="text-sm text-muted-foreground">
-            {futureAssignments.length} משימות
-          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setVehicleOpen(true)} className="gap-1">
+              <Truck className="h-3 w-3" />
+              רכב חדש
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {safeAssignments.length} משימות
+            </span>
+          </div>
         </div>
       </div>
 
@@ -108,7 +148,11 @@ export function OfficerTasksPage() {
 
       {/* Task list */}
       <div className="px-4 py-3 space-y-6">
-        {grouped.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : grouped.length === 0 ? (
           <div className="text-center py-16">
             <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-foreground font-medium">אין משימות עתידיות</p>
@@ -125,8 +169,8 @@ export function OfficerTasksPage() {
                   <TaskCard
                     key={a.id}
                     assignment={a}
-                    soldier={soldiers.find(s => s.id === a.soldierId)}
-                    tank={tanks.find(t => t.id === a.tankId)}
+                    soldier={safeSoldiers.find(s => s.id === a.soldierId)}
+                    tank={safeTanks.find(t => t.id === a.tankId)}
                     onComplete={handleComplete}
                     onReassign={handleReassign}
                   />
@@ -150,8 +194,8 @@ export function OfficerTasksPage() {
       <QuickAssignSheet
         open={assignOpen || !!reassignData}
         onClose={() => { setAssignOpen(false); setReassignData(null); }}
-        soldiers={soldiers}
-        tanks={tanks}
+        soldiers={safeSoldiers}
+        tanks={safeTanks}
         onAssign={handleNewAssignment}
         prefill={reassignData ? {
           soldierId: reassignData.soldierId,
@@ -161,6 +205,39 @@ export function OfficerTasksPage() {
           endDateTime: reassignData.endDateTime,
         } : undefined}
       />
+
+      {/* Create Vehicle Dialog */}
+      <Dialog open={vehicleOpen} onOpenChange={setVehicleOpen}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>צור רכב חדש</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>שם/מספר רכב</Label>
+              <Input value={newVehicleName} onChange={(e) => setNewVehicleName(e.target.value)} placeholder="377" />
+            </div>
+            <div>
+              <Label>סוג רכב</Label>
+              <Input value={newVehicleType} onChange={(e) => setNewVehicleType(e.target.value)} placeholder="מרכבה 4" />
+            </div>
+            <div>
+              <Label>קטגוריה</Label>
+              <Select value={newVehicleCategory} onValueChange={(v) => setNewVehicleCategory(v as VehicleCategory)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {VEHICLE_CATEGORIES.map(c => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleCreateVehicle} disabled={!newVehicleName.trim()} className="w-full">
+              צור רכב
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
