@@ -19,11 +19,13 @@ interface AppState {
   sidebarOpen: boolean;
   offlineCategories: Record<CacheCategory, boolean>;
   selectedActivationId: string | null;
+  reportPrefs: Record<string, Record<string, boolean>>;
   toggleTheme: () => void;
   setSidebarOpen: (open: boolean) => void;
   toggleOfflineCategory: (category: CacheCategory) => void;
   isCategoryEnabled: (category: CacheCategory) => boolean;
   setSelectedActivationId: (id: string | null) => void;
+  setReportFieldVisibility: (reportType: string, field: string, visible: boolean) => void;
 }
 
 export function useCacheEnabled(category: CacheCategory): boolean {
@@ -51,6 +53,7 @@ export const useAppStore = create<AppState>()(
       sidebarOpen: false,
       offlineCategories: { ...defaultOfflineCategories },
       selectedActivationId: null,
+      reportPrefs: {},
       toggleTheme: () =>
         set((state) => {
           const newTheme = state.theme === 'dark' ? 'light' : 'dark';
@@ -67,6 +70,16 @@ export const useAppStore = create<AppState>()(
         })),
       setSelectedActivationId: (id) => set({ selectedActivationId: id }),
       isCategoryEnabled: (category) => get().offlineCategories[category] ?? true,
+      setReportFieldVisibility: (reportType, field, visible) =>
+        set((state) => ({
+          reportPrefs: {
+            ...state.reportPrefs,
+            [reportType]: {
+              ...state.reportPrefs[reportType],
+              [field]: visible,
+            },
+          },
+        })),
     }),
     {
       name: 'pluga-app-settings',
@@ -74,6 +87,7 @@ export const useAppStore = create<AppState>()(
         theme: state.theme,
         offlineCategories: state.offlineCategories,
         selectedActivationId: state.selectedActivationId,
+        reportPrefs: state.reportPrefs,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.theme === 'light') {

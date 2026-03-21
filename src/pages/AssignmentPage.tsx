@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CalendarClock, Plus, Truck, FolderPlus, Users, Car } from 'lucide-react';
+import { CalendarClock, Plus, Truck, FolderPlus, Users, Car, FileText } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,8 @@ import { useAppStore } from '@/stores/useAppStore';
 import { ASSIGNMENT_COLORS, getCrewRoleLabel, VEHICLE_CATEGORIES, ROLE_DISPLAY_ORDER } from '@/lib/constants';
 import { noonToday, noonTomorrow, dateRangesOverlap } from '@/lib/utils';
 import type { CrewRole, VehicleCategory } from '@/db/schema';
+import { ReportSection } from '@/components/reports/ReportSection';
+import { generateAssignmentDailyReport, generateAssignmentChangesReport } from '@/lib/report-generators';
 
 type GroupBy = 'vehicle' | 'soldier';
 
@@ -614,6 +616,38 @@ export function AssignmentPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Reports section */}
+      {isLoaded && (
+        <div className="border rounded-lg p-3 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+            <FileText className="h-4 w-4" />
+            דוחות
+          </div>
+          <ReportSection
+            title="דוח שיבוצים"
+            reportType="assignment-daily"
+            fields={[
+              { key: 'militaryId', label: 'מספר אישי (מ"א)' },
+              { key: 'role', label: 'תפקיד' },
+              { key: 'departmentHeaders', label: 'כותרות מחלקה' },
+            ]}
+            onGenerate={(date, prefs) =>
+              generateAssignmentDailyReport(date, assignments, soldiers, tanks, departments ?? [], prefs)
+            }
+          />
+          <ReportSection
+            title="דוח חילופים"
+            reportType="assignment-changes"
+            fields={[
+              { key: 'militaryId', label: 'מספר אישי (מ"א)' },
+            ]}
+            onGenerate={(date, prefs) =>
+              generateAssignmentChangesReport(date, assignments, soldiers, prefs)
+            }
+          />
+        </div>
+      )}
 
       {/* Assign soldier dialog */}
       <Dialog

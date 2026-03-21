@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CalendarClock, Plus, Settings2, Trash2 } from 'lucide-react';
+import { CalendarClock, Plus, Settings2, Trash2, FileText } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,15 +11,21 @@ import type { GanttRow } from '@/components/gantt/GanttChart';
 import { useShampafEntries, useAllShampafVacations } from '@/hooks/useShampaf';
 import { useActivations, addActivation, deleteActivation } from '@/hooks/useActivation';
 import { useSoldiers } from '@/hooks/useSoldiers';
+import { useAssignments } from '@/hooks/useAssignment';
+import { useTanks } from '@/hooks/useTanks';
 import { useAppStore } from '@/stores/useAppStore';
 import { SHAMPAF_COLORS } from '@/lib/constants';
 import { formatDate, dateRangesOverlap, todayString } from '@/lib/utils';
+import { ReportSection } from '@/components/reports/ReportSection';
+import { generateShampafChangesReport, generateShampafStatusReport } from '@/lib/report-generators';
 
 export function ShampafPage() {
   const allEntries = useShampafEntries();
   const vacations = useAllShampafVacations();
   const soldiers = useSoldiers();
   const activations = useActivations();
+  const allAssignments = useAssignments();
+  const tanks = useTanks();
 
   // Global activation from store
   const selectedActivationId = useAppStore(s => s.selectedActivationId);
@@ -150,6 +156,38 @@ export function ShampafPage() {
           <GanttChart rows={ganttRows} startDate={ganttStart} endDate={ganttEnd} showTodayMarker />
         </TabsContent>
       </Tabs>
+
+      {/* Reports section */}
+      {entries && soldiers && (
+        <div className="border rounded-lg p-3 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+            <FileText className="h-4 w-4" />
+            דוחות
+          </div>
+          <ReportSection
+            title="דוח שינויים"
+            reportType="shampaf-changes"
+            fields={[
+              { key: 'militaryId', label: 'מספר אישי (מ"א)' },
+            ]}
+            onGenerate={(date, prefs) =>
+              generateShampafChangesReport(date, allEntries ?? [], soldiers, prefs)
+            }
+          />
+          <ReportSection
+            title="דוח מצב"
+            reportType="shampaf-status"
+            fields={[
+              { key: 'militaryId', label: 'מספר אישי (מ"א)' },
+              { key: 'vehicle', label: 'רכב' },
+              { key: 'role', label: 'תפקיד' },
+            ]}
+            onGenerate={(date, prefs) =>
+              generateShampafStatusReport(date, allEntries ?? [], allAssignments ?? [], soldiers, tanks ?? [], prefs)
+            }
+          />
+        </div>
+      )}
 
       {/* Activation management dialog */}
       <Dialog open={showActivationDialog} onOpenChange={setShowActivationDialog}>
