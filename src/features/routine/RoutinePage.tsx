@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Plus, Trash2, Clock, User } from 'lucide-react';
+import { Calendar, Plus, Trash2, Clock, User, FolderPlus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,10 +21,10 @@ import {
   assignRoutineSlot,
   unassignRoutineSlot,
 } from './useRoutine';
-import { useTanks, useDepartments } from '@/hooks/useTanks';
+import { useTanks, useDepartments, addDepartment, deleteDepartment, addTank } from '@/hooks/useTanks';
 import { useSoldiers } from '@/hooks/useSoldiers';
-import { getCrewRoleLabel, ROLE_DISPLAY_ORDER } from '@/lib/constants';
-import type { CrewRole, Assignment } from '@/db/schema';
+import { getCrewRoleLabel, ROLE_DISPLAY_ORDER, VEHICLE_CATEGORIES } from '@/lib/constants';
+import type { CrewRole, Assignment, VehicleCategory } from '@/db/schema';
 
 export function RoutinePage() {
   const templates = useRoutineTemplates();
@@ -37,6 +37,16 @@ export function RoutinePage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newName, setNewName] = useState('');
   const [newTankId, setNewTankId] = useState('');
+
+  // Department dialog
+  const [showDeptDialog, setShowDeptDialog] = useState(false);
+  const [deptName, setDeptName] = useState('');
+
+  // Vehicle dialog
+  const [showVehicleDialog, setShowVehicleDialog] = useState(false);
+  const [vehicleName, setVehicleName] = useState('');
+  const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>('tank');
+  const [vehicleDeptId, setVehicleDeptId] = useState('');
 
   // Assign dialog
   const [assignDialog, setAssignDialog] = useState<{
@@ -63,7 +73,6 @@ export function RoutinePage() {
     const deptOrder = new Map((departments ?? []).map((d, i) => [d.id, i]));
     const deptNameMap = new Map((departments ?? []).map(d => [d.id, d.name]));
 
-    // Sort templates by tank's department order then tank designation
     const sorted = [...templates].sort((a, b) => {
       const tankA = tanks.find(t => t.id === a.tankId);
       const tankB = tanks.find(t => t.id === b.tankId);
@@ -95,8 +104,8 @@ export function RoutinePage() {
 
   // Convert routine template crew slots to Assignment-like objects for TankDiagram
   const templateToAssignments = (tmpl: typeof templates[0]): Assignment[] => {
-    return tmpl.crewSlots.map((slot, i) => ({
-      id: `routine_${tmpl.id}_${i}`,
+    return tmpl.crewSlots.map((slot) => ({
+      id: `routine_${tmpl.id}_${slot.role}_${slot.soldierId}`,
       soldierId: slot.soldierId,
       type: 'tank_role' as const,
       tankId: tmpl.tankId,
@@ -112,6 +121,28 @@ export function RoutinePage() {
     setShowCreateDialog(false);
     setNewName('');
     setNewTankId('');
+  };
+
+  const handleCreateDept = async () => {
+    if (!deptName) return;
+    await addDepartment(deptName, (departments?.length ?? 0) + 1);
+    setShowDeptDialog(false);
+    setDeptName('');
+  };
+
+  const handleCreateVehicle = async () => {
+    if (!vehicleName) return;
+    await addTank({
+      designation: vehicleName,
+      type: vehicleCategory === 'tank' ? 'מרכבה סימן 4' : 'רכב רגיל',
+      vehicleCategory,
+      departmentId: vehicleDeptId || undefined,
+      status: 'operational',
+    });
+    setShowVehicleDialog(false);
+    setVehicleName('');
+    setVehicleCategory('tank');
+    setVehicleDeptId('');
   };
 
   const openAssignDialog = (templateId: string, tankId: string, role: CrewRole | 'fifth') => {
@@ -133,6 +164,22 @@ export function RoutinePage() {
     await unassignRoutineSlot(templateId, role, soldierId, soldierName);
   };
 
+  // Get filtered soldier options for the assign dialog based on role
+  const getFilteredSoldiers = () => {
+    const role = assignDialog.role;
+    if (!role || role === 'fifth') return soldiers;
+
+    if (role === 'commander') {
+      // For commander role: only commanders
+      return soldiers.filter(s => s.trainedRole === 'commander');
+    }
+
+    // For other roles: soldiers with matching trainedRole first, then commanders
+    const matching = soldiers.filter(s => s.trainedRole === role);
+    const commanders = soldiers.filter(s => s.trainedRole === 'commander' && !matching.some(m => m.id === s.id));
+    return [...matching, ...commanders];
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -141,6 +188,14 @@ export function RoutinePage() {
           <Button size="sm" variant="outline" onClick={() => setShowLogDialog(true)}>
             <Clock className="h-4 w-4 ml-1" />
             יומן שינויים
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setShowDeptDialog(true)}>
+            <FolderPlus className="h-4 w-4 ml-1" />
+            מחלקה חדשה
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setShowVehicleDialog(true)}>
+            <Plus className="h-4 w-4 ml-1" />
+            רכב חדש
           </Button>
           <Button size="sm" onClick={() => setShowCreateDialog(true)}>
             <Plus className="h-4 w-4 ml-1" />
@@ -153,12 +208,24 @@ export function RoutinePage() {
         שגרת ברירת מחדל לצוותי הרכבים. שינויים נרשמים ביומן.
       </p>
 
-      {/* Template cards grouped by department — like tanks tab */}
+      {/* Template cards grouped by department */}
       {templatesByDept.map((group) => (
         <div key={group.deptId} className="space-y-3">
           {group.deptName && (
-            <div className="border-b pb-1">
+            <div className="flex items-center justify-between border-b pb-1">
               <h3 className="text-sm font-bold text-muted-foreground">{group.deptName}</h3>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs text-destructive h-6"
+                onClick={() => {
+                  if (confirm(`למחוק את המחלקה "${group.deptName}"?`)) {
+                    deleteDepartment(group.deptId);
+                  }
+                }}
+              >
+                מחק מחלקה
+              </Button>
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -251,10 +318,12 @@ export function RoutinePage() {
                       soldiers={soldiers}
                       onAssignSlot={(role) => openAssignDialog(tmpl.id, tmpl.tankId, role)}
                       onUnassign={(assignmentId) => {
-                        // Find which slot this is
-                        const idx = parseInt(assignmentId.split('_').pop() ?? '0');
-                        const slot = tmpl.crewSlots[idx];
-                        if (slot) handleUnassign(tmpl.id, slot.role, slot.soldierId);
+                        // Parse the assignment ID to find the slot
+                        // Format: routine_{templateId}_{role}_{soldierId}
+                        const parts = assignmentId.split('_');
+                        const role = parts[2] as CrewRole;
+                        const soldierId = parts.slice(3).join('_');
+                        if (role && soldierId) handleUnassign(tmpl.id, role, soldierId);
                       }}
                     />
                   </CardContent>
@@ -269,7 +338,7 @@ export function RoutinePage() {
         <div className="text-center py-12 text-muted-foreground">
           <Calendar className="h-12 w-12 mx-auto mb-3 opacity-40" />
           <p>אין שגרות מוגדרות</p>
-          <p className="text-xs mt-1">לחץ "שגרה חדשה" להתחלה</p>
+          <p className="text-xs mt-1">צור מחלקה, רכב ושגרה להתחלה</p>
         </div>
       )}
 
@@ -299,13 +368,23 @@ export function RoutinePage() {
               className="mt-1 h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">בחר...</option>
-              {soldiers.map((s) => (
+              {getFilteredSoldiers().map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.firstName} {s.lastName}
                   {s.trainedRole ? ` (${getCrewRoleLabel(s.trainedRole)})` : ''}
                 </option>
               ))}
             </select>
+            {assignDialog.role && assignDialog.role !== 'fifth' && assignDialog.role !== 'commander' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                מוצגים חיילים עם תפקיד {getCrewRoleLabel(assignDialog.role as CrewRole)} ומפקדים
+              </p>
+            )}
+            {assignDialog.role === 'commander' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                מוצגים מפקדים בלבד
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssignDialog({ open: false, templateId: '', tankId: '', role: null })}>
@@ -353,6 +432,90 @@ export function RoutinePage() {
             <Button onClick={handleCreateTemplate} disabled={!newName || !newTankId}>
               <Plus className="h-4 w-4 me-1" />
               צור שגרה
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create department dialog */}
+      <Dialog open={showDeptDialog} onOpenChange={setShowDeptDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>מחלקה חדשה</DialogTitle>
+            <DialogDescription>צור מחלקה חדשה לקיבוץ רכבים</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-sm">שם המחלקה</Label>
+              <Input
+                value={deptName}
+                onChange={(e) => setDeptName(e.target.value)}
+                placeholder='לדוגמה: "מחלקה א"'
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeptDialog(false)}>ביטול</Button>
+            <Button onClick={handleCreateDept} disabled={!deptName}>
+              <FolderPlus className="h-4 w-4 me-1" />
+              צור מחלקה
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create vehicle dialog */}
+      <Dialog open={showVehicleDialog} onOpenChange={setShowVehicleDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>רכב חדש</DialogTitle>
+            <DialogDescription>הוסף רכב חדש למערכת</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-sm">שם / מספר רכב</Label>
+              <Input
+                value={vehicleName}
+                onChange={(e) => setVehicleName(e.target.value)}
+                placeholder='לדוגמה: "413 - נ4"'
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">סוג רכב</Label>
+              <select
+                value={vehicleCategory}
+                onChange={(e) => setVehicleCategory(e.target.value as VehicleCategory)}
+                className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {VEHICLE_CATEGORIES.map((vc) => (
+                  <option key={vc.value} value={vc.value}>{vc.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {vehicleCategory === 'tank'
+                  ? 'טנק — 4 תפקידים: מפקד, תותחן, נהג, טען'
+                  : 'רכב רגיל — ללא הגבלת תפקידים'}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">מחלקה</Label>
+              <select
+                value={vehicleDeptId}
+                onChange={(e) => setVehicleDeptId(e.target.value)}
+                className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">ללא מחלקה</option>
+                {(departments ?? []).map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVehicleDialog(false)}>ביטול</Button>
+            <Button onClick={handleCreateVehicle} disabled={!vehicleName}>
+              <Plus className="h-4 w-4 me-1" />
+              צור רכב
             </Button>
           </DialogFooter>
         </DialogContent>

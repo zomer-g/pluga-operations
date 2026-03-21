@@ -31,7 +31,7 @@ export function ReportSection({ title, reportType, fields, onGenerate }: ReportS
   const [copied, setCopied] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  const reportPrefs = useAppStore(s => s.reportPrefs[reportType] ?? {});
+  const reportPrefs = useAppStore(s => s.reportPrefs?.[reportType] ?? {});
   const setFieldVisibility = useAppStore(s => s.setReportFieldVisibility);
 
   const handleCopy = async () => {
