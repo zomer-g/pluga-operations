@@ -21,7 +21,7 @@ import {
   assignRoutineSlot,
   unassignRoutineSlot,
 } from './useRoutine';
-import { useTanks, useDepartments, addDepartment, deleteDepartment, addTank } from '@/hooks/useTanks';
+import { useTanks, useDepartments, addDepartment, deleteDepartment, addTank, deleteTank } from '@/hooks/useTanks';
 import { useSoldiers } from '@/hooks/useSoldiers';
 import { getCrewRoleLabel, ROLE_DISPLAY_ORDER, VEHICLE_CATEGORIES } from '@/lib/constants';
 import type { CrewRole, Assignment, VehicleCategory } from '@/db/schema';
@@ -132,13 +132,15 @@ export function RoutinePage() {
 
   const handleCreateVehicle = async () => {
     if (!vehicleName) return;
-    await addTank({
+    const tankId = await addTank({
       designation: vehicleName,
       type: vehicleCategory === 'tank' ? 'מרכבה סימן 4' : 'רכב רגיל',
       vehicleCategory,
       departmentId: vehicleDeptId || undefined,
       status: 'operational',
     });
+    // Auto-create a routine template for this vehicle
+    await addRoutineTemplate({ name: vehicleName, tankId, crewSlots: [] });
     setShowVehicleDialog(false);
     setVehicleName('');
     setVehicleCategory('tank');
@@ -252,7 +254,10 @@ export function RoutinePage() {
                           size="icon"
                           className="h-6 w-6"
                           onClick={() => {
-                            if (confirm(`למחוק את "${tmpl.name}"?`)) deleteRoutineTemplate(tmpl.id);
+                            if (confirm(`למחוק את "${tmpl.name}" והרכב שלו?`)) {
+                            deleteRoutineTemplate(tmpl.id);
+                            deleteTank(tmpl.tankId);
+                          }
                           }}
                         >
                           <Trash2 className="h-3 w-3 text-destructive" />
@@ -305,7 +310,10 @@ export function RoutinePage() {
                         size="icon"
                         className="h-6 w-6"
                         onClick={() => {
-                          if (confirm(`למחוק את "${tmpl.name}"?`)) deleteRoutineTemplate(tmpl.id);
+                          if (confirm(`למחוק את "${tmpl.name}" והרכב שלו?`)) {
+                            deleteRoutineTemplate(tmpl.id);
+                            deleteTank(tmpl.tankId);
+                          }
                         }}
                       >
                         <Trash2 className="h-3 w-3 text-destructive" />

@@ -23,7 +23,7 @@ import {
   addAssignment,
 } from '@/hooks/useAssignment';
 import { useSoldiers } from '@/hooks/useSoldiers';
-import { useTanks, addTank, useDepartments, addDepartment, deleteDepartment, setTankDepartment } from '@/hooks/useTanks';
+import { useTanks, addTank, deleteTank, useDepartments, addDepartment, deleteDepartment, setTankDepartment } from '@/hooks/useTanks';
 import { useActivations } from '@/hooks/useActivation';
 import { useAppStore } from '@/stores/useAppStore';
 import { ASSIGNMENT_COLORS, getCrewRoleLabel, VEHICLE_CATEGORIES, ROLE_DISPLAY_ORDER } from '@/lib/constants';
@@ -536,6 +536,11 @@ export function AssignmentPage() {
                                     ))}
                                   </select>
                                   <span className="text-xs text-muted-foreground bg-muted/30 px-2 py-0.5 rounded">רכב רגיל</span>
+                                  <button
+                                    onClick={() => { if (confirm(`למחוק את "${tank.designation}"?`)) deleteTank(tank.id); }}
+                                    className="text-destructive hover:text-destructive/80 text-xs p-0.5"
+                                    title="מחק רכב"
+                                  >✕</button>
                                 </div>
                               </div>
                               <div className="space-y-1">
@@ -587,6 +592,11 @@ export function AssignmentPage() {
                                   <option key={d.id} value={d.id}>{d.name}</option>
                                 ))}
                               </select>
+                              <button
+                                onClick={() => { if (confirm(`למחוק את "${tank.designation}"?`)) deleteTank(tank.id); }}
+                                className="text-destructive hover:text-destructive/80 text-xs p-0.5"
+                                title="מחק רכב"
+                              >✕</button>
                             </div>
                             <TankDiagram
                               tankId={tank.id}
