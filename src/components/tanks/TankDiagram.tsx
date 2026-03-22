@@ -26,6 +26,12 @@ function getSoldierName(soldierId: string, soldiers: Soldier[]): string {
   return s ? `${s.firstName} ${s.lastName[0]}'` : '---';
 }
 
+function nameFontSize(name: string): string {
+  if (name.length > 14) return 'text-[9px]';
+  if (name.length > 10) return 'text-[10px]';
+  return 'text-xs';
+}
+
 export function TankDiagram({
   tankId,
   designation,
@@ -80,7 +86,7 @@ export function TankDiagram({
               </span>
               {filled ? (
                 <>
-                  <span className="text-xs font-medium truncate max-w-full">
+                  <span className={cn('font-medium text-center leading-tight break-words max-w-full', nameFontSize(getSoldierName(assignment.soldierId, soldiers)))}>
                     {getSoldierName(assignment.soldierId, soldiers)}
                   </span>
                   {onUnassign && (
