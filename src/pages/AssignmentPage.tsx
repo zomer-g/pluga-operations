@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CalendarClock, Plus, Truck, FolderPlus, Users, Car, FileText } from 'lucide-react';
+import { CalendarClock, Plus, Truck, FolderPlus, Users, Car, FileText, Pencil } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ import {
   addAssignment,
 } from '@/hooks/useAssignment';
 import { useSoldiers } from '@/hooks/useSoldiers';
-import { useTanks, addTank, deleteTank, useDepartments, addDepartment, deleteDepartment, setTankDepartment } from '@/hooks/useTanks';
+import { useTanks, addTank, deleteTank, updateTank, useDepartments, addDepartment, updateDepartment, deleteDepartment, setTankDepartment } from '@/hooks/useTanks';
 import { useActivations } from '@/hooks/useActivation';
 import { useAppStore } from '@/stores/useAppStore';
 import { ASSIGNMENT_COLORS, getCrewRoleLabel, VEHICLE_CATEGORIES, ROLE_DISPLAY_ORDER } from '@/lib/constants';
@@ -87,6 +87,12 @@ export function AssignmentPage() {
   }>({ open: false, tankId: '', role: null });
   const [assignSoldierId, setAssignSoldierId] = useState('');
   const [assignWarnings, setAssignWarnings] = useState<string[]>([]);
+
+  // Inline editing
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
+  const [editingDeptName, setEditingDeptName] = useState('');
+  const [editingTankId, setEditingTankId] = useState<string | null>(null);
+  const [editingTankName, setEditingTankName] = useState('');
 
   // Vehicle creation dialog
   const [showVehicleDialog, setShowVehicleDialog] = useState(false);
@@ -496,7 +502,32 @@ export function AssignmentPage() {
                 <div key={group.deptId} className="space-y-3">
                   {group.deptName && (
                     <div className="flex items-center justify-between border-b pb-1">
-                      <h3 className="text-sm font-bold text-muted-foreground">{group.deptName}</h3>
+                      {editingDeptId === group.deptId ? (
+                        <input
+                          autoFocus
+                          value={editingDeptName}
+                          onChange={e => setEditingDeptName(e.target.value)}
+                          onBlur={() => {
+                            if (editingDeptName.trim() && editingDeptName !== group.deptName) {
+                              updateDepartment(group.deptId, { name: editingDeptName.trim() });
+                            }
+                            setEditingDeptId(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            if (e.key === 'Escape') setEditingDeptId(null);
+                          }}
+                          className="text-sm font-bold text-muted-foreground bg-transparent border-b border-primary outline-none px-1"
+                        />
+                      ) : (
+                        <h3
+                          className="text-sm font-bold text-muted-foreground cursor-pointer hover:text-foreground flex items-center gap-1"
+                          onClick={() => { setEditingDeptId(group.deptId); setEditingDeptName(group.deptName); }}
+                        >
+                          {group.deptName}
+                          <Pencil className="h-3 w-3 opacity-40" />
+                        </h3>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -530,7 +561,32 @@ export function AssignmentPage() {
                           <Card key={tank.id}>
                             <CardContent className="p-3 space-y-2">
                               <div className="flex items-center justify-between">
-                                <span className="text-sm font-bold">{tank.designation}</span>
+                                {editingTankId === tank.id ? (
+                                  <input
+                                    autoFocus
+                                    value={editingTankName}
+                                    onChange={e => setEditingTankName(e.target.value)}
+                                    onBlur={() => {
+                                      if (editingTankName.trim() && editingTankName !== tank.designation) {
+                                        updateTank(tank.id, { designation: editingTankName.trim() });
+                                      }
+                                      setEditingTankId(null);
+                                    }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                      if (e.key === 'Escape') setEditingTankId(null);
+                                    }}
+                                    className="text-sm font-bold bg-transparent border-b border-primary outline-none px-1"
+                                  />
+                                ) : (
+                                  <span
+                                    className="text-sm font-bold cursor-pointer hover:text-primary flex items-center gap-1"
+                                    onClick={() => { setEditingTankId(tank.id); setEditingTankName(tank.designation); }}
+                                  >
+                                    {tank.designation}
+                                    <Pencil className="h-3 w-3 opacity-40" />
+                                  </span>
+                                )}
                                 <div className="flex items-center gap-1">
                                   {/* Department selector */}
                                   <select
@@ -607,13 +663,34 @@ export function AssignmentPage() {
                                 title="מחק רכב"
                               >✕</button>
                             </div>
+                            {editingTankId === tank.id ? (
+                              <div className="text-center py-1">
+                                <input
+                                  autoFocus
+                                  value={editingTankName}
+                                  onChange={e => setEditingTankName(e.target.value)}
+                                  onBlur={() => {
+                                    if (editingTankName.trim() && editingTankName !== tank.designation) {
+                                      updateTank(tank.id, { designation: editingTankName.trim() });
+                                    }
+                                    setEditingTankId(null);
+                                  }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    if (e.key === 'Escape') setEditingTankId(null);
+                                  }}
+                                  className="text-sm font-bold bg-transparent border-b border-primary outline-none px-1 text-center"
+                                />
+                              </div>
+                            ) : null}
                             <TankDiagram
                               tankId={tank.id}
-                              designation={tank.designation}
+                              designation={editingTankId === tank.id ? editingTankName : tank.designation}
                               assignments={sortedAssignments}
                               soldiers={soldiers}
                               onAssignSlot={(role) => openAssignDialog(tank.id, role)}
                               onUnassign={handleUnassign}
+                              onDesignationClick={() => { setEditingTankId(tank.id); setEditingTankName(tank.designation); }}
                             />
                           </CardContent>
                         </Card>

@@ -11,6 +11,7 @@ interface TankDiagramProps {
   soldiers: Soldier[];
   onAssignSlot?: (role: CrewRole | 'fifth') => void;
   onUnassign?: (assignmentId: string) => void;
+  onDesignationClick?: () => void;
 }
 
 const GRID_POSITIONS: { role: CrewRole; row: number; col: number }[] = [
@@ -32,6 +33,7 @@ export function TankDiagram({
   soldiers,
   onAssignSlot,
   onUnassign,
+  onDesignationClick,
 }: TankDiagramProps) {
   const getAssignmentForRole = (role: CrewRole) =>
     assignments.find((a) => a.role === role && a.tankId === tankId);
@@ -44,7 +46,13 @@ export function TankDiagram({
   return (
     <div dir="ltr" className="flex flex-col items-center gap-1 p-3">
       {/* Tank designation */}
-      <div className="text-sm font-bold mb-1">{designation}</div>
+      <div
+        className={cn('text-sm font-bold mb-1', onDesignationClick && 'cursor-pointer hover:text-primary')}
+        onClick={onDesignationClick}
+      >
+        {designation}
+        {onDesignationClick && <span className="text-[10px] opacity-40 ml-1">✎</span>}
+      </div>
 
       {/* Front label */}
       <div className="text-[10px] text-muted-foreground tracking-wider">

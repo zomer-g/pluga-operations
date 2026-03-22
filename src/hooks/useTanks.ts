@@ -128,9 +128,9 @@ export async function addTank(data: TankFormData): Promise<string> {
   return id;
 }
 
-export async function updateTank(id: string, data: TankFormData): Promise<void> {
+export async function updateTank(id: string, data: Partial<TankFormData>): Promise<void> {
   await requireEditPermission('/assignments');
-  await updateDoc(doc(db, 'tanks', id), stripUndefined({ ...data, platoonId: data.platoonId || undefined, notes: data.notes || undefined } as any));
+  await updateDoc(doc(db, 'tanks', id), stripUndefined(data as any));
 }
 
 export async function deleteTank(id: string): Promise<void> {

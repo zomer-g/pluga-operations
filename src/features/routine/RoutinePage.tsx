@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Plus, Clock, User, FolderPlus } from 'lucide-react';
+import { Calendar, Plus, Clock, User, FolderPlus, Pencil } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,9 +20,12 @@ import {
   useRoutineVehicles,
   addRoutineTemplate,
   deleteRoutineTemplate,
+  updateRoutineTemplate,
   addRoutineDepartment,
+  updateRoutineDepartment,
   deleteRoutineDepartment,
   addRoutineVehicle,
+  updateRoutineVehicle,
   deleteRoutineVehicle,
   assignRoutineSlot,
   unassignRoutineSlot,
@@ -59,6 +62,12 @@ export function RoutinePage() {
 
   // Change log dialog
   const [showLogDialog, setShowLogDialog] = useState(false);
+
+  // Inline editing
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
+  const [editingDeptName, setEditingDeptName] = useState('');
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [editingVehicleName, setEditingVehicleName] = useState('');
 
   if (!templates || !vehicles || !soldiers) {
     return (
@@ -208,7 +217,32 @@ export function RoutinePage() {
         <div key={group.deptId} className="space-y-3">
           {group.deptName && (
             <div className="flex items-center justify-between border-b pb-1">
-              <h3 className="text-sm font-bold text-muted-foreground">{group.deptName}</h3>
+              {editingDeptId === group.deptId ? (
+                <input
+                  autoFocus
+                  value={editingDeptName}
+                  onChange={e => setEditingDeptName(e.target.value)}
+                  onBlur={() => {
+                    if (editingDeptName.trim() && editingDeptName !== group.deptName) {
+                      updateRoutineDepartment(group.deptId, { name: editingDeptName.trim() });
+                    }
+                    setEditingDeptId(null);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    if (e.key === 'Escape') setEditingDeptId(null);
+                  }}
+                  className="text-sm font-bold text-muted-foreground bg-transparent border-b border-primary outline-none px-1"
+                />
+              ) : (
+                <h3
+                  className="text-sm font-bold text-muted-foreground cursor-pointer hover:text-foreground flex items-center gap-1"
+                  onClick={() => { setEditingDeptId(group.deptId); setEditingDeptName(group.deptName); }}
+                >
+                  {group.deptName}
+                  <Pencil className="h-3 w-3 opacity-40" />
+                </h3>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -240,7 +274,34 @@ export function RoutinePage() {
                   <Card key={tmpl.id}>
                     <CardContent className="p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold">{tmpl.name}</span>
+                        {editingVehicleId === tmpl.id ? (
+                          <input
+                            autoFocus
+                            value={editingVehicleName}
+                            onChange={e => setEditingVehicleName(e.target.value)}
+                            onBlur={() => {
+                              const name = editingVehicleName.trim();
+                              if (name && name !== tmpl.name) {
+                                updateRoutineTemplate(tmpl.id, { name });
+                                updateRoutineVehicle(tmpl.tankId, { designation: name });
+                              }
+                              setEditingVehicleId(null);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                              if (e.key === 'Escape') setEditingVehicleId(null);
+                            }}
+                            className="text-sm font-bold bg-transparent border-b border-primary outline-none px-1"
+                          />
+                        ) : (
+                          <span
+                            className="text-sm font-bold cursor-pointer hover:text-primary flex items-center gap-1"
+                            onClick={() => { setEditingVehicleId(tmpl.id); setEditingVehicleName(tmpl.name); }}
+                          >
+                            {tmpl.name}
+                            <Pencil className="h-3 w-3 opacity-40" />
+                          </span>
+                        )}
                         <button
                           onClick={() => {
                             if (confirm(`למחוק את "${tmpl.name}" והרכב שלו?`)) {
@@ -289,7 +350,34 @@ export function RoutinePage() {
                 <Card key={tmpl.id}>
                   <CardContent className="p-2">
                     <div className="flex items-center justify-between px-2 pt-1">
-                      <span className="text-xs font-medium text-muted-foreground">{tmpl.name}</span>
+                      {editingVehicleId === tmpl.id ? (
+                        <input
+                          autoFocus
+                          value={editingVehicleName}
+                          onChange={e => setEditingVehicleName(e.target.value)}
+                          onBlur={() => {
+                            const name = editingVehicleName.trim();
+                            if (name && name !== tmpl.name) {
+                              updateRoutineTemplate(tmpl.id, { name });
+                              updateRoutineVehicle(tmpl.tankId, { designation: name });
+                            }
+                            setEditingVehicleId(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            if (e.key === 'Escape') setEditingVehicleId(null);
+                          }}
+                          className="text-xs font-medium bg-transparent border-b border-primary outline-none px-1"
+                        />
+                      ) : (
+                        <span
+                          className="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground flex items-center gap-1"
+                          onClick={() => { setEditingVehicleId(tmpl.id); setEditingVehicleName(tmpl.name); }}
+                        >
+                          {tmpl.name}
+                          <Pencil className="h-2.5 w-2.5 opacity-40" />
+                        </span>
+                      )}
                       <button
                         onClick={() => {
                           if (confirm(`למחוק את "${tmpl.name}" והרכב שלו?`)) {

@@ -47,6 +47,11 @@ export async function addRoutineDepartment(name: string, order: number = 0): Pro
   return id;
 }
 
+export async function updateRoutineDepartment(id: string, data: { name?: string; order?: number }): Promise<void> {
+  await requireEditPermission('/routine');
+  await updateDoc(doc(db, 'routineDepartments', id), stripUndefined(data as any));
+}
+
 export async function deleteRoutineDepartment(id: string): Promise<void> {
   await requireEditPermission('/routine');
   const batch = writeBatch(db);
@@ -83,6 +88,11 @@ export async function addRoutineVehicle(data: {
   const id = generateId();
   await setDoc(doc(db, 'routineVehicles', id), stripUndefined({ ...data, id }) as any);
   return id;
+}
+
+export async function updateRoutineVehicle(id: string, data: { designation?: string; departmentId?: string }): Promise<void> {
+  await requireEditPermission('/routine');
+  await updateDoc(doc(db, 'routineVehicles', id), stripUndefined(data as any));
 }
 
 export async function deleteRoutineVehicle(id: string): Promise<void> {
