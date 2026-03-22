@@ -208,3 +208,62 @@ export async function deleteShampafVacation(id: string): Promise<void> {
   await requireEditPermission('/shampaf');
   await deleteDoc(doc(db, 'shampafVacations', id));
 }
+
+// ===== Batch Operations =====
+
+export interface ShampafConflict {
+  soldierId: string;
+  type: 'existing_shampaf';
+  message: string;
+  existingEntryId: string;
+}
+
+export async function checkShampafBatchConflicts(
+  soldierIds: string[],
+  startDT: string,
+  endDT: string,
+): Promise<ShampafConflict[]> {
+  const snap = await getDocs(collection(db, 'shampafEntries'));
+  const allEntries = snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
+  const conflicts: ShampafConflict[] = [];
+
+  for (const sid of soldierIds) {
+    const overlap = allEntries.find(e =>
+      e.soldierId === sid &&
+      dateRangesOverlap(e.startDateTime, e.endDateTime, startDT, endDT)
+    );
+    if (overlap) {
+      conflicts.push({
+        soldierId: sid,
+        type: 'existing_shampaf',
+        message: `שמ"פ קיים (${overlap.startDateTime.split('T')[0]} - ${overlap.endDateTime.split('T')[0]})`,
+        existingEntryId: overlap.id,
+      });
+    }
+  }
+  return conflicts;
+}
+
+export async function addShampafEntriesBatch(
+  entries: { soldierId: string; startDateTime: string; endDateTime: string; orderNumber?: string }[],
+): Promise<{ ids: string[] }> {
+  await requireEditPermission('/shampaf');
+  const batch = writeBatch(db);
+  const ids: string[] = [];
+
+  for (const data of entries) {
+    const id = generateId();
+    ids.push(id);
+    const entry: ShampafEntry = {
+      id,
+      soldierId: data.soldierId,
+      startDateTime: data.startDateTime,
+      endDateTime: data.endDateTime,
+      orderNumber: data.orderNumber,
+    };
+    batch.set(doc(db, 'shampafEntries', id), stripUndefined(entry as unknown as any));
+  }
+
+  await batch.commit();
+  return { ids };
+}

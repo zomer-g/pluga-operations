@@ -1,7 +1,7 @@
 import { useState, Fragment } from 'react';
 import {
   Pencil, Trash2, ChevronDown, ChevronLeft,
-  Plus, Check, X,
+  Plus, Check, X, Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn, formatDate, generateId, todayString } from '@/lib/utils';
@@ -10,6 +10,7 @@ import {
   addShampafVacation, updateShampafVacation, deleteShampafVacation,
 } from '@/hooks/useShampaf';
 import type { ShampafEntry, ShampafVacation, Soldier } from '@/db/schema';
+import { MultiShampafDialog } from '@/components/shampaf/MultiShampafDialog';
 
 interface ShampafTableProps {
   entries: ShampafEntry[];
@@ -32,6 +33,7 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [multiOpen, setMultiOpen] = useState(false);
 
   // Edit state
   const [soldierId, setSoldierId] = useState('');
@@ -151,7 +153,11 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={() => setMultiOpen(true)}>
+          <Users className="h-4 w-4 me-1" />
+          שמ"פ מרובה
+        </Button>
         <Button size="sm" onClick={startAdd}>
           <Plus className="h-4 w-4 me-1" />
           הוסף שמ"פ
@@ -371,6 +377,12 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
           </tbody>
         </table>
       </div>
+
+      <MultiShampafDialog
+        open={multiOpen}
+        onClose={() => setMultiOpen(false)}
+        soldiers={soldiers}
+      />
     </div>
   );
 }
