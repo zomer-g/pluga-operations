@@ -700,12 +700,32 @@ export function AssignmentPage() {
                 className="mt-1 h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">בחר...</option>
-                {soldiers?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.firstName} {s.lastName}
-                    {s.trainedRole ? ` (${getCrewRoleLabel(s.trainedRole)})` : ''}
-                  </option>
-                ))}
+                {(() => {
+                  // Filter out soldiers already assigned to a tank at viewDateTime
+                  const now = viewDateTime || noonToday();
+                  const assignedIds = new Set(
+                    (assignments ?? [])
+                      .filter(a => a.type === 'tank_role' && a.tankId && a.startDateTime <= now && a.endDateTime >= now)
+                      .map(a => a.soldierId)
+                  );
+                  const role = assignDialog.role;
+                  let available = (soldiers ?? []).filter(s => !assignedIds.has(s.id));
+                  if (role && role !== 'fifth') {
+                    if (role === 'commander') {
+                      available = available.filter(s => s.trainedRole === 'commander');
+                    } else {
+                      const matching = available.filter(s => s.trainedRole === role);
+                      const commanders = available.filter(s => s.trainedRole === 'commander');
+                      available = [...matching, ...commanders.filter(s => !matching.includes(s))];
+                    }
+                  }
+                  return available.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.firstName} {s.lastName}
+                      {s.trainedRole ? ` (${getCrewRoleLabel(s.trainedRole)})` : ''}
+                    </option>
+                  ));
+                })()}
               </select>
             </div>
 

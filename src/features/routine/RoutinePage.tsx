@@ -158,14 +158,24 @@ export function RoutinePage() {
     await unassignRoutineSlot(templateId, role, soldierId, soldierName);
   };
 
+  // Collect all soldier IDs already assigned in any routine template
+  const assignedSoldierIds = new Set<string>();
+  for (const tmpl of templates) {
+    for (const slot of tmpl.crewSlots ?? []) {
+      if (slot.soldierId) assignedSoldierIds.add(slot.soldierId);
+    }
+  }
+
   const getFilteredSoldiers = () => {
     const role = assignDialog.role;
-    if (!role || role === 'fifth') return soldiers;
+    // Filter out already-assigned soldiers
+    const available = soldiers.filter(s => !assignedSoldierIds.has(s.id));
+    if (!role || role === 'fifth') return available;
     if (role === 'commander') {
-      return soldiers.filter(s => s.trainedRole === 'commander');
+      return available.filter(s => s.trainedRole === 'commander');
     }
-    const matching = soldiers.filter(s => s.trainedRole === role);
-    const commanders = soldiers.filter(s => s.trainedRole === 'commander');
+    const matching = available.filter(s => s.trainedRole === role);
+    const commanders = available.filter(s => s.trainedRole === 'commander');
     return [...matching, ...commanders];
   };
 

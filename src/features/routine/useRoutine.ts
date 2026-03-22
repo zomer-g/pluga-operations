@@ -206,13 +206,16 @@ export async function assignRoutineSlot(
   const template = snap.data() as RoutineTemplate;
   const crewSlots = [...(template.crewSlots ?? [])];
 
-  const existingIdx = crewSlots.findIndex(s => s.role === role);
-  if (existingIdx >= 0) {
-    crewSlots.splice(existingIdx, 1);
-  }
-
   if (role !== 'fifth') {
+    // For named roles (tank), replace existing assignment for that role
+    const existingIdx = crewSlots.findIndex(s => s.role === role);
+    if (existingIdx >= 0) {
+      crewSlots.splice(existingIdx, 1);
+    }
     crewSlots.push({ role: role as CrewRole, soldierId });
+  } else {
+    // For standard vehicle, just add as crew member
+    crewSlots.push({ role: 'driver' as CrewRole, soldierId });
   }
 
   await updateDoc(doc(db, 'routineTemplates', templateId), {
