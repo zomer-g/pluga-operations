@@ -1,5 +1,5 @@
 import { useState, useMemo, Fragment } from 'react';
-import { Pencil, Trash2, Plus, Save, XCircle } from 'lucide-react';
+import { Pencil, Trash2, Plus, Save, XCircle, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConflictBadge } from '@/components/assignment/ConflictBadge';
 import {
@@ -16,6 +16,7 @@ import {
 import type { ConflictType } from '@/hooks/useAssignment';
 import { CREW_ROLES, getCrewRoleLabel, ROLE_DISPLAY_ORDER } from '@/lib/constants';
 import type { Assignment, Soldier, Tank, CrewRole, AssignmentType, Department } from '@/db/schema';
+import { MultiAssignDialog } from '@/components/assignment/MultiAssignDialog';
 
 interface AssignmentTableProps {
   assignments: Assignment[];
@@ -152,6 +153,7 @@ export function AssignmentTable({
   const [editingData, setEditingData] = useState<EditingData | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [multiAssignOpen, setMultiAssignOpen] = useState(false);
 
   const sections = useMemo(
     () => groupAssignments(assignments, groupBy, tanks, soldiers, departments),
@@ -464,10 +466,16 @@ export function AssignmentTable({
             </div>
           )}
         </div>
-        <Button size="sm" onClick={startAdd}>
-          <Plus className="h-4 w-4 ml-1" />
-          שבץ חייל
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setMultiAssignOpen(true)}>
+            <Users className="h-4 w-4 ml-1" />
+            שיבוץ מרובה
+          </Button>
+          <Button size="sm" onClick={startAdd}>
+            <Plus className="h-4 w-4 ml-1" />
+            שבץ חייל
+          </Button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -524,6 +532,14 @@ export function AssignmentTable({
           </tbody>
         </table>
       </div>
+
+      <MultiAssignDialog
+        open={multiAssignOpen}
+        onClose={() => setMultiAssignOpen(false)}
+        soldiers={soldiers}
+        tanks={tanks}
+        departments={departments}
+      />
     </div>
   );
 }

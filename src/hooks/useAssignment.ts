@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, getDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
 import type { Assignment, CrewRole, ShampafEntry, ShampafVacation } from '@/db/schema';
 import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
@@ -62,7 +62,7 @@ export function useTankAssignmentsAt(tankId: string | undefined, dateTime?: stri
   return assignments;
 }
 
-export type ConflictType = 'no_shampaf' | 'on_vacation';
+export type ConflictType = 'no_shampaf' | 'on_vacation' | 'overlapping_assignment';
 
 export function useAssignmentConflicts() {
   const [conflicts, setConflicts] = useState<Map<string, ConflictType[]> | undefined>();
@@ -83,6 +83,16 @@ export function useAssignmentConflicts() {
       const allVacations = vacSnap.docs.map(d => d.data() as ShampafVacation);
 
       for (const a of activeAssignments) {
+        const types: ConflictType[] = [];
+
+        // Check overlapping assignments (same soldier, different assignment, overlapping dates)
+        const overlapping = activeAssignments.find(other =>
+          other.id !== a.id &&
+          other.soldierId === a.soldierId &&
+          dateRangesOverlap(a.startDateTime, a.endDateTime, other.startDateTime, other.endDateTime)
+        );
+        if (overlapping) types.push('overlapping_assignment');
+
         const soldierEntries = allShampafEntries.filter(e => e.soldierId === a.soldierId);
 
         const covering = soldierEntries.find(e =>
@@ -90,7 +100,8 @@ export function useAssignmentConflicts() {
         );
 
         if (!covering) {
-          result.set(a.id, ['no_shampaf']);
+          types.push('no_shampaf');
+          result.set(a.id, types);
           continue;
         }
 
@@ -99,9 +110,9 @@ export function useAssignmentConflicts() {
           dateRangesOverlap(v.startDateTime, v.endDateTime, a.startDateTime, a.endDateTime)
         );
 
-        if (onVacation) {
-          result.set(a.id, ['on_vacation']);
-        }
+        if (onVacation) types.push('on_vacation');
+
+        if (types.length > 0) result.set(a.id, types);
       }
 
       setConflicts(result);
@@ -176,4 +187,103 @@ export async function updateAssignment(id: string, data: Partial<Assignment>): P
 export async function deleteAssignment(id: string): Promise<void> {
   await requireEditPermission('/assignments');
   await deleteDoc(doc(db, 'assignments', id));
+}
+
+// ===== Batch Operations =====
+
+export interface SoldierConflict {
+  soldierId: string;
+  type: 'overlapping_assignment' | 'no_shampaf' | 'on_vacation';
+  message: string;
+  existingAssignmentId?: string;
+  existingAssignment?: Assignment;
+}
+
+export async function checkBatchConflicts(
+  soldierIds: string[],
+  startDT: string,
+  endDT: string,
+): Promise<SoldierConflict[]> {
+  const conflicts: SoldierConflict[] = [];
+
+  // Fetch all data once
+  const [assignSnap, shampafSnap, vacSnap] = await Promise.all([
+    getDocs(collection(db, 'assignments')),
+    getDocs(collection(db, 'shampafEntries')),
+    getDocs(collection(db, 'shampafVacations')),
+  ]);
+
+  const allAssignments = assignSnap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
+  const allShampaf = shampafSnap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
+  const allVacations = vacSnap.docs.map(d => d.data() as ShampafVacation);
+
+  for (const soldierId of soldierIds) {
+    // Check overlapping assignments
+    const overlapping = allAssignments.find(a =>
+      a.soldierId === soldierId &&
+      dateRangesOverlap(a.startDateTime, a.endDateTime, startDT, endDT)
+    );
+    if (overlapping) {
+      conflicts.push({
+        soldierId,
+        type: 'overlapping_assignment',
+        message: `משובץ ${overlapping.tankId ? `לטנק` : overlapping.missionName ?? 'למשימה'} (${overlapping.startDateTime.slice(0, 10)} - ${overlapping.endDateTime.slice(0, 10)})`,
+        existingAssignmentId: overlapping.id,
+        existingAssignment: overlapping,
+      });
+    }
+
+    // Check shampaf
+    const soldierEntries = allShampaf.filter(e => e.soldierId === soldierId);
+    const covering = soldierEntries.find(e =>
+      e.startDateTime <= startDT && e.endDateTime >= endDT
+    );
+    if (!covering) {
+      conflicts.push({
+        soldierId,
+        type: 'no_shampaf',
+        message: 'לחייל אין שמ"פ פעיל בתקופה זו',
+      });
+      continue;
+    }
+
+    const entryVacations = allVacations.filter(v => v.shampafEntryId === covering.id);
+    const onVacation = entryVacations.some(v =>
+      dateRangesOverlap(v.startDateTime, v.endDateTime, startDT, endDT)
+    );
+    if (onVacation) {
+      conflicts.push({
+        soldierId,
+        type: 'on_vacation',
+        message: 'החייל בחופשה בתקופה זו',
+      });
+    }
+  }
+
+  return conflicts;
+}
+
+export async function addAssignmentsBatch(
+  assignments: Omit<Assignment, 'id'>[],
+  deleteIds?: string[],
+): Promise<{ ids: string[] }> {
+  await requireEditPermission('/assignments');
+  const batch = writeBatch(db);
+  const ids: string[] = [];
+
+  if (deleteIds) {
+    for (const did of deleteIds) {
+      batch.delete(doc(db, 'assignments', did));
+    }
+  }
+
+  for (const a of assignments) {
+    const id = generateId();
+    ids.push(id);
+    const assignment: Assignment = { ...a, id } as Assignment;
+    batch.set(doc(db, 'assignments', id), stripUndefined(assignment as any));
+  }
+
+  await batch.commit();
+  return { ids };
 }

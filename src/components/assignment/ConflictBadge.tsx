@@ -16,6 +16,10 @@ const CONFLICT_INFO: Record<ConflictType, { color: string; tooltip: string }> = 
     color: 'text-amber-500',
     tooltip: 'החייל בחופשה',
   },
+  overlapping_assignment: {
+    color: 'text-orange-500',
+    tooltip: 'חייל משובץ במקום אחר',
+  },
 };
 
 export function ConflictBadge({ conflicts, className }: ConflictBadgeProps) {
@@ -27,8 +31,10 @@ export function ConflictBadge({ conflicts, className }: ConflictBadgeProps) {
     );
   }
 
-  // Show the highest severity conflict (no_shampaf > on_vacation)
-  const primary = conflicts.includes('no_shampaf') ? 'no_shampaf' : conflicts[0]!;
+  // Show the highest severity conflict (no_shampaf > overlapping > on_vacation)
+  const primary = conflicts.includes('no_shampaf') ? 'no_shampaf'
+    : conflicts.includes('overlapping_assignment') ? 'overlapping_assignment'
+    : conflicts[0]!;
   const info = CONFLICT_INFO[primary];
 
   return (
