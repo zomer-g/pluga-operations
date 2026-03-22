@@ -23,12 +23,13 @@ const GRID_POSITIONS: { role: CrewRole; row: number; col: number }[] = [
 
 function getSoldierName(soldierId: string, soldiers: Soldier[]): string {
   const s = soldiers.find((s) => s.id === soldierId);
-  return s ? `${s.firstName} ${s.lastName[0]}'` : '---';
+  return s ? `${s.firstName} ${s.lastName}` : '---';
 }
 
 function nameFontSize(name: string): string {
-  if (name.length > 12) return 'text-[8px]';
-  if (name.length > 9) return 'text-[9px]';
+  if (name.length > 18) return 'text-[7px]';
+  if (name.length > 14) return 'text-[8px]';
+  if (name.length > 10) return 'text-[9px]';
   return 'text-[10px]';
 }
 
