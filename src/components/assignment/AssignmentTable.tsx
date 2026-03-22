@@ -93,7 +93,7 @@ function groupAssignments(
     return sections;
   }
 
-  // Group by vehicle under department
+  // Group by vehicle under department (both sorted A-Z)
   const deptMap = new Map(departments.map(d => [d.id, d.name]));
   const tanksByDept = new Map<string, Tank[]>();
 
@@ -103,8 +103,15 @@ function groupAssignments(
     tanksByDept.get(key)!.push(tank);
   }
 
+  // Sort tanks within each department A-Z
+  for (const [, deptTanks] of tanksByDept) {
+    deptTanks.sort((a, b) => a.designation.localeCompare(b.designation, 'he'));
+  }
+
+  // Sort departments A-Z, "no department" last
+  const sortedDepts = [...departments].sort((a, b) => a.name.localeCompare(b.name, 'he'));
   const orderedKeys: string[] = [];
-  for (const dept of departments) {
+  for (const dept of sortedDepts) {
     if (tanksByDept.has(dept.id)) orderedKeys.push(dept.id);
   }
   if (tanksByDept.has('__none__')) orderedKeys.push('__none__');

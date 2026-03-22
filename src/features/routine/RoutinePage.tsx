@@ -70,14 +70,17 @@ export function RoutinePage() {
 
   // Group templates by department (via their vehicle's departmentId)
   const templatesByDept = (() => {
-    const deptOrder = new Map((departments ?? []).map((d, i) => [d.id, i]));
     const deptNameMap = new Map((departments ?? []).map(d => [d.id, d.name]));
+    // Sort departments A-Z for alphabetical ordering
+    const sortedDeptNames = new Map(
+      [...(departments ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'he')).map((d, i) => [d.id, i])
+    );
 
     const sorted = [...templates].sort((a, b) => {
       const vA = vehicles.find(v => v.id === a.tankId);
       const vB = vehicles.find(v => v.id === b.tankId);
-      const dA = vA?.departmentId ? (deptOrder.get(vA.departmentId) ?? 999) : 999;
-      const dB = vB?.departmentId ? (deptOrder.get(vB.departmentId) ?? 999) : 999;
+      const dA = vA?.departmentId ? (sortedDeptNames.get(vA.departmentId) ?? 999) : 999;
+      const dB = vB?.departmentId ? (sortedDeptNames.get(vB.departmentId) ?? 999) : 999;
       if (dA !== dB) return dA - dB;
       return (vA?.designation ?? '').localeCompare(vB?.designation ?? '', 'he');
     });

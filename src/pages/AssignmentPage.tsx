@@ -154,9 +154,15 @@ export function AssignmentPage() {
       tanksByDept.get(key)!.push(tank);
     }
 
-    // Build sections: departments first (in order), then uncategorized
+    // Sort tanks within each department A-Z
+    for (const [, dt] of tanksByDept) {
+      dt.sort((a, b) => a.designation.localeCompare(b.designation, 'he'));
+    }
+
+    // Build sections: departments sorted A-Z, then uncategorized
+    const sortedDepts = [...deptList].sort((a, b) => a.name.localeCompare(b.name, 'he'));
     const orderedKeys: string[] = [];
-    for (const dept of deptList) {
+    for (const dept of sortedDepts) {
       if (tanksByDept.has(dept.id)) orderedKeys.push(dept.id);
     }
     if (tanksByDept.has('__none__')) orderedKeys.push('__none__');
@@ -324,10 +330,13 @@ export function AssignmentPage() {
   // Sort tanks by department then by designation, with role order enforcement
   const sortedTanks = useMemo(() => {
     if (!tanks) return [];
-    const deptOrder = new Map((departments ?? []).map((d, i) => [d.id, i]));
+    // Sort departments A-Z, then tanks within each department A-Z
+    const sortedDeptNames = new Map(
+      [...(departments ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'he')).map((d, i) => [d.id, i])
+    );
     return [...tanks].sort((a, b) => {
-      const deptA = a.departmentId ? (deptOrder.get(a.departmentId) ?? 999) : 999;
-      const deptB = b.departmentId ? (deptOrder.get(b.departmentId) ?? 999) : 999;
+      const deptA = a.departmentId ? (sortedDeptNames.get(a.departmentId) ?? 999) : 999;
+      const deptB = b.departmentId ? (sortedDeptNames.get(b.departmentId) ?? 999) : 999;
       if (deptA !== deptB) return deptA - deptB;
       return a.designation.localeCompare(b.designation, 'he');
     });
