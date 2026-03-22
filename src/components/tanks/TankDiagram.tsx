@@ -27,9 +27,9 @@ function getSoldierName(soldierId: string, soldiers: Soldier[]): string {
 }
 
 function nameFontSize(name: string): string {
-  if (name.length > 14) return 'text-[9px]';
-  if (name.length > 10) return 'text-[10px]';
-  return 'text-xs';
+  if (name.length > 12) return 'text-[8px]';
+  if (name.length > 9) return 'text-[9px]';
+  return 'text-[10px]';
 }
 
 export function TankDiagram({
@@ -66,7 +66,7 @@ export function TankDiagram({
       </div>
 
       {/* 2x2 grid */}
-      <div className="grid grid-cols-2 gap-1.5 w-full max-w-[240px]">
+      <div className="grid grid-cols-2 gap-1.5 w-full">
         {GRID_POSITIONS.map(({ role, row, col }) => {
           const assignment = getAssignmentForRole(role);
           const filled = !!assignment;
@@ -129,7 +129,7 @@ export function TankDiagram({
       {/* 5th crew member slot */}
       <div
         className={cn(
-          'w-full max-w-[240px] flex items-center justify-center rounded-md p-2 min-h-[44px] text-center transition-colors mt-1',
+          'w-full flex items-center justify-center rounded-md p-2 min-h-[44px] text-center transition-colors mt-1',
           fifthMember
             ? 'bg-primary/5 border border-primary/30'
             : 'border border-dashed border-muted-foreground/40'
