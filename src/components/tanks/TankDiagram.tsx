@@ -66,15 +66,16 @@ export function TankDiagram({
       </div>
 
       {/* 2x2 grid */}
-      <div className="grid grid-cols-2 gap-1.5 w-full max-w-[200px]">
+      <div className="grid grid-cols-2 gap-1.5 w-full max-w-[240px]">
         {GRID_POSITIONS.map(({ role, row, col }) => {
           const assignment = getAssignmentForRole(role);
           const filled = !!assignment;
+          const soldierName = filled ? getSoldierName(assignment.soldierId, soldiers) : '';
           return (
             <div
               key={role}
               className={cn(
-                'relative flex flex-col items-center justify-center rounded-md p-2 min-h-[56px] text-center transition-colors',
+                'relative flex flex-col items-center justify-center rounded-md p-1.5 min-h-[56px] text-center transition-colors overflow-hidden',
                 filled
                   ? 'bg-primary/5 border border-primary/30'
                   : 'border border-dashed border-muted-foreground/40'
@@ -86,8 +87,11 @@ export function TankDiagram({
               </span>
               {filled ? (
                 <>
-                  <span className={cn('font-medium text-center leading-tight break-words max-w-full', nameFontSize(getSoldierName(assignment.soldierId, soldiers)))}>
-                    {getSoldierName(assignment.soldierId, soldiers)}
+                  <span
+                    className={cn('font-medium text-center leading-tight w-full', nameFontSize(soldierName))}
+                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                  >
+                    {soldierName}
                   </span>
                   {onUnassign && (
                     <button
@@ -125,7 +129,7 @@ export function TankDiagram({
       {/* 5th crew member slot */}
       <div
         className={cn(
-          'w-full max-w-[200px] flex items-center justify-center rounded-md p-2 min-h-[44px] text-center transition-colors mt-1',
+          'w-full max-w-[240px] flex items-center justify-center rounded-md p-2 min-h-[44px] text-center transition-colors mt-1',
           fifthMember
             ? 'bg-primary/5 border border-primary/30'
             : 'border border-dashed border-muted-foreground/40'
