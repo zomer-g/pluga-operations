@@ -12,107 +12,34 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
-    // Get the user's permission doc
-    function getUserPerm() {
-      return get(/databases/$(database)/documents/userPermissions/$(userId())).data;
-    }
-
     // Check if user permission doc exists
     function hasUserPerm() {
       return exists(/databases/$(database)/documents/userPermissions/$(userId()));
     }
 
-    // Get a permission group doc
-    function getGroup(groupId) {
-      return get(/databases/$(database)/documents/permissionGroups/$(groupId)).data;
-    }
-
-    // Check if user has a permission doc (bootstrap case: no doc = first user)
-    function isVerifiedUser() {
-      return isAuthenticated() && (hasUserPerm() || !exists(/databases/$(database)/documents/userPermissions/$(userId())));
-    }
-
-    // Check if a specific group grants at least 'view' for a route
-    function groupHasView(groupId, route) {
-      let group = getGroup(groupId);
-      return group.pagePermissions[route] in ['view', 'edit', 'admin'];
-    }
-
-    // Check if a specific group grants at least 'edit' for a route
-    function groupHasEdit(groupId, route) {
-      let group = getGroup(groupId);
-      return group.pagePermissions[route] in ['edit', 'admin'];
-    }
-
-    // Check if a specific group grants 'admin' for a route
-    function groupHasAdmin(groupId, route) {
-      let group = getGroup(groupId);
-      return group.pagePermissions[route] == 'admin';
-    }
-
-    // Check read permission: user is authenticated + has permission doc
-    // Firestore limits: can't iterate arrays, so we check up to 3 groups
-    function canReadRoute(route) {
-      return isAuthenticated() && (
-        // Bootstrap: no permission doc yet (first user)
-        !hasUserPerm() ||
-        // Custom override
-        (getUserPerm().keys().hasAll(['customPageOverrides']) &&
-         getUserPerm().customPageOverrides[route] in ['view', 'edit', 'admin']) ||
-        // Check first 3 group memberships
-        (getUserPerm().groupIds.size() > 0 && groupHasView(getUserPerm().groupIds[0], route)) ||
-        (getUserPerm().groupIds.size() > 1 && groupHasView(getUserPerm().groupIds[1], route)) ||
-        (getUserPerm().groupIds.size() > 2 && groupHasView(getUserPerm().groupIds[2], route))
-      );
-    }
-
-    // Check write permission: at least 'edit' on route
-    function canWriteRoute(route) {
-      return isAuthenticated() && (
-        !hasUserPerm() ||
-        (getUserPerm().keys().hasAll(['customPageOverrides']) &&
-         getUserPerm().customPageOverrides[route] in ['edit', 'admin']) ||
-        (getUserPerm().groupIds.size() > 0 && groupHasEdit(getUserPerm().groupIds[0], route)) ||
-        (getUserPerm().groupIds.size() > 1 && groupHasEdit(getUserPerm().groupIds[1], route)) ||
-        (getUserPerm().groupIds.size() > 2 && groupHasEdit(getUserPerm().groupIds[2], route))
-      );
-    }
-
-    // Check admin permission on route
-    function canAdminRoute(route) {
-      return isAuthenticated() && (
-        !hasUserPerm() ||
-        (getUserPerm().keys().hasAll(['customPageOverrides']) &&
-         getUserPerm().customPageOverrides[route] == 'admin') ||
-        (getUserPerm().groupIds.size() > 0 && groupHasAdmin(getUserPerm().groupIds[0], route)) ||
-        (getUserPerm().groupIds.size() > 1 && groupHasAdmin(getUserPerm().groupIds[1], route)) ||
-        (getUserPerm().groupIds.size() > 2 && groupHasAdmin(getUserPerm().groupIds[2], route))
-      );
-    }
-
-    // Simplified checks for collections that map to a specific page route
+    // Any authenticated user can read
     function canRead() {
       return isAuthenticated();
     }
 
+    // Only users with a permission doc can write
     function canWrite() {
       return isAuthenticated() && hasUserPerm();
     }
 
     // ===== Collection rules =====
 
-    // Soldiers — mapped to /soldiers route
+    // Soldiers
     match /soldiers/{soldierDoc} {
       allow read: if canRead();
       allow create: if canWrite()
         && request.resource.data.firstName is string
         && request.resource.data.lastName is string
         && request.resource.data.id is string;
-      allow update: if canWrite();
-      allow delete: if canWrite();
+      allow update, delete: if canWrite();
     }
 
-    // Status entries — part of soldier management
+    // Status entries
     match /statusEntries/{entryDoc} {
       allow read: if canRead();
       allow create: if canWrite()
@@ -290,18 +217,15 @@ service cloud.firestore {
 
     // User permissions — special rules
     match /userPermissions/{permUserId} {
-      // Any authenticated user can read their own doc; users with perm can read others
       allow read: if isAuthenticated() && (permUserId == userId() || hasUserPerm());
-      // User can create their own permission doc (bootstrap on first login)
       allow create: if isAuthenticated() && permUserId == userId()
         && request.resource.data.email is string
         && request.resource.data.displayName is string;
-      // Users can update their own doc (migration) or admins can update any
       allow update: if isAuthenticated() && (permUserId == userId() || canWrite());
       allow delete: if canWrite();
     }
 
-    // Permission groups — readable by authenticated users, writable by users with perm
+    // Permission groups
     match /permissionGroups/{groupDoc} {
       allow read: if canRead();
       allow create: if canWrite()
@@ -309,7 +233,7 @@ service cloud.firestore {
       allow update, delete: if canWrite();
     }
 
-    // Changelog entries for routine
+    // Changelog entries for routine (append-only)
     match /routineChangelog/{logDoc} {
       allow read: if canRead();
       allow create: if canWrite();
