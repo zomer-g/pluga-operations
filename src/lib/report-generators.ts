@@ -1,4 +1,4 @@
-import type { Assignment, Soldier, Tank, Department, ShampafEntry, CrewRole } from '@/db/schema';
+import type { Assignment, Soldier, Tank, Department, ShampafEntry, ShampafVacation, CrewRole } from '@/db/schema';
 import { getCrewRoleLabel, ROLE_DISPLAY_ORDER } from '@/lib/constants';
 
 type FieldPrefs = Record<string, boolean>;
@@ -226,6 +226,7 @@ export function generateShampafStatusReport(
   soldiers: Soldier[],
   tanks: Tank[],
   prefs: FieldPrefs,
+  vacations?: ShampafVacation[],
 ): string {
   const showMilitaryId = isVisible(prefs, 'militaryId');
   const showVehicle = isVisible(prefs, 'vehicle');
@@ -242,6 +243,17 @@ export function generateShampafStatusReport(
   for (const e of shampafEntries) {
     if (e.startDateTime <= dateEnd && e.endDateTime >= dateStart) {
       activeSoldierIds.add(e.soldierId);
+    }
+  }
+
+  // Build vacation/preparation lookup per soldier
+  const soldierVacStatus = new Map<string, string>();
+  if (vacations) {
+    for (const v of vacations) {
+      if (v.startDateTime <= dateEnd && v.endDateTime >= dateStart && activeSoldierIds.has(v.soldierId)) {
+        const type = (v.type || 'vacation') === 'preparation' ? 'התארגנות' : 'חופשה';
+        soldierVacStatus.set(v.soldierId, type);
+      }
     }
   }
 
@@ -268,6 +280,11 @@ export function generateShampafStatusReport(
   lines.push(`חיילים פעילים (${activeSoldiers.length}):`);
 
   for (const s of activeSoldiers) {
+    const vacStatus = soldierVacStatus.get(s.id);
+    if (vacStatus) {
+      lines.push(`  • ${soldierLabel(s, showMilitaryId)} - ${vacStatus}`);
+      continue;
+    }
     const parts = [`  • ${soldierLabel(s, showMilitaryId)}`];
     const assign = soldierAssignment.get(s.id);
     if (assign) {

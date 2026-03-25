@@ -56,6 +56,7 @@ export const SOLDIER_STATUSES: { value: SoldierStatus; label: string; color: str
   { value: 'training', label: 'אימון', color: 'bg-status-training' },
   { value: 'leave', label: 'חופשה', color: 'bg-status-leave' },
   { value: 'medical_leave', label: 'חופשת מחלה', color: 'bg-status-medical' },
+  { value: 'preparation', label: 'התארגנות', color: 'bg-status-preparation' },
   { value: 'released', label: 'שוחרר', color: 'bg-status-released' },
   { value: 'absent', label: 'נעדר', color: 'bg-status-absent' },
   { value: 'other', label: 'אחר', color: 'bg-gray-500' },
@@ -91,6 +92,7 @@ export function getVehicleCategoryLabel(category?: VehicleCategory): string {
 export const SHAMPAF_COLORS = {
   mobilized: 'bg-emerald-600',
   vacation: 'bg-amber-500',
+  preparation: 'bg-orange-500',
   conflict: 'bg-red-500',
 };
 
@@ -126,6 +128,7 @@ export function getStatusBadgeVariant(status: SoldierStatus): string {
     training: 'training',
     leave: 'leave',
     medical_leave: 'medical',
+    preparation: 'preparation',
     released: 'released',
     absent: 'absent',
     other: 'secondary',

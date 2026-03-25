@@ -35,6 +35,7 @@ export type SoldierStatus =
   | 'training'
   | 'leave'
   | 'medical_leave'
+  | 'preparation'
   | 'released'
   | 'absent'
   | 'other';
@@ -165,10 +166,13 @@ export interface ShampafEntry {
   notes?: string;
 }
 
+export type ShampafVacationType = 'vacation' | 'preparation';
+
 export interface ShampafVacation {
   id: string;
   shampafEntryId: string;
   soldierId: string;
+  type: ShampafVacationType;
   startDateTime: string;
   endDateTime: string;
   reason?: string;

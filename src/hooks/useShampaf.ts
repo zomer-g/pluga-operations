@@ -66,7 +66,7 @@ export function useShampafForDateRange(startDate: string, endDate: string) {
   return entries;
 }
 
-export type ShampafStatus = 'mobilized' | 'vacation' | 'none';
+export type ShampafStatus = 'mobilized' | 'vacation' | 'preparation' | 'none';
 
 export function useSoldierShampafStatus(soldierId: string | undefined, dateTime?: string): ShampafStatus | undefined {
   const [status, setStatus] = useState<ShampafStatus | undefined>();
@@ -94,8 +94,12 @@ export function useSoldierShampafStatus(soldierId: string | undefined, dateTime?
         query(collection(db, 'shampafVacations'), where('shampafEntryId', '==', activeEntry.id))
       );
       const vacations = vacSnap.docs.map(d => d.data() as ShampafVacation);
-      const onVacation = vacations.some(v => v.startDateTime <= now && v.endDateTime >= now);
-      setStatus(onVacation ? 'vacation' : 'mobilized');
+      const activeVac = vacations.find(v => v.startDateTime <= now && v.endDateTime >= now);
+      if (activeVac) {
+        setStatus((activeVac.type || 'vacation') === 'preparation' ? 'preparation' : 'vacation');
+      } else {
+        setStatus('mobilized');
+      }
     });
     return unsub;
   }, [soldierId, dateTime]);
@@ -179,6 +183,7 @@ export async function deleteShampafEntry(id: string): Promise<void> {
 export async function addShampafVacation(data: {
   shampafEntryId: string;
   soldierId: string;
+  type?: 'vacation' | 'preparation';
   startDateTime: string;
   endDateTime: string;
   reason?: string;
@@ -190,6 +195,7 @@ export async function addShampafVacation(data: {
     id,
     shampafEntryId: data.shampafEntryId,
     soldierId: data.soldierId,
+    type: data.type || 'vacation',
     startDateTime: data.startDateTime,
     endDateTime: data.endDateTime,
     reason: data.reason,

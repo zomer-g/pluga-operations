@@ -14,6 +14,7 @@ const badgeVariants = cva(
         training: 'border-transparent bg-status-training text-white',
         leave: 'border-transparent bg-status-leave text-black',
         medical: 'border-transparent bg-status-medical text-white',
+        preparation: 'border-transparent bg-status-preparation text-white',
         released: 'border-transparent bg-status-released text-white',
         reserve: 'border-transparent bg-status-reserve text-white',
         absent: 'border-transparent bg-status-absent text-white',

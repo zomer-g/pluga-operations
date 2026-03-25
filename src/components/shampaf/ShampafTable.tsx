@@ -9,7 +9,7 @@ import {
   addShampafEntry, updateShampafEntry, deleteShampafEntry,
   addShampafVacation, updateShampafVacation, deleteShampafVacation,
 } from '@/hooks/useShampaf';
-import type { ShampafEntry, ShampafVacation, Soldier } from '@/db/schema';
+import type { ShampafEntry, ShampafVacation, ShampafVacationType, Soldier } from '@/db/schema';
 import { MultiShampafDialog } from '@/components/shampaf/MultiShampafDialog';
 
 interface ShampafTableProps {
@@ -48,6 +48,7 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
   const [vacStart, setVacStart] = useState('');
   const [vacEnd, setVacEnd] = useState('');
   const [vacReason, setVacReason] = useState('');
+  const [vacType, setVacType] = useState<ShampafVacationType>('vacation');
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -101,13 +102,14 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
   };
 
   // === Vacation CRUD ===
-  const startAddVac = (entryId: string) => {
+  const startAddVac = (entryId: string, type: ShampafVacationType = 'vacation') => {
     setEditingVacId(`__newv_${generateId()}`);
     setIsNewVac(true);
     setVacParentId(entryId);
     setVacStart(todayString());
     setVacEnd(todayString());
     setVacReason('');
+    setVacType(type);
     if (!expandedIds.has(entryId)) toggleExpand(entryId);
   };
 
@@ -118,6 +120,7 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
     setVacStart(toDateOnly(v.startDateTime));
     setVacEnd(toDateOnly(v.endDateTime));
     setVacReason(v.reason ?? '');
+    setVacType(v.type || 'vacation');
   };
 
   const cancelVacEdit = () => { setEditingVacId(null); setIsNewVac(false); setVacParentId(null); };
@@ -130,12 +133,14 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
       await addShampafVacation({
         shampafEntryId: vacParentId,
         soldierId: parent.soldierId,
+        type: vacType,
         startDateTime: vacStart + 'T08:00',
         endDateTime: vacEnd + 'T18:00',
         reason: vacReason || undefined,
       });
     } else if (editingVacId) {
       await updateShampafVacation(editingVacId, {
+        type: vacType,
         startDateTime: vacStart + 'T08:00',
         endDateTime: vacEnd + 'T18:00',
         reason: vacReason || undefined,
@@ -284,18 +289,28 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
                       <tr className="bg-amber-500/5">
                         <td colSpan={7} className="py-1.5 px-4">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-amber-400">חופשות — {getSoldierName(entry.soldierId, soldiers)}</span>
-                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startAddVac(entry.id)}>
-                              <Plus className="h-3 w-3 me-1" />חופשה
-                            </Button>
+                            <span className="text-xs font-medium text-amber-400">חופשות / התארגנות — {getSoldierName(entry.soldierId, soldiers)}</span>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startAddVac(entry.id, 'vacation')}>
+                                <Plus className="h-3 w-3 me-1" />חופשה
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-400" onClick={() => startAddVac(entry.id, 'preparation')}>
+                                <Plus className="h-3 w-3 me-1" />התארגנות
+                              </Button>
+                            </div>
                           </div>
                         </td>
                       </tr>
 
-                      {/* New vacation row */}
+                      {/* New vacation/preparation row */}
                       {isNewVac && vacParentId === entry.id && (
-                        <tr className="border-b bg-amber-500/10">
-                          <td></td>
+                        <tr className={cn('border-b', vacType === 'preparation' ? 'bg-orange-500/10' : 'bg-amber-500/10')}>
+                          <td className="py-1.5 px-3">
+                            <select value={vacType} onChange={(e) => setVacType(e.target.value as ShampafVacationType)} className={cn(inputClass, 'dark:bg-slate-800 dark:text-white')}>
+                              <option value="vacation">חופשה</option>
+                              <option value="preparation">התארגנות</option>
+                            </select>
+                          </td>
                           <td className="py-1.5 px-3">
                             <input type="text" value={vacReason} onChange={(e) => setVacReason(e.target.value)} placeholder="סיבה" className={inputClass} />
                           </td>
@@ -317,14 +332,26 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
 
                       {entryVacs.map((vac) => {
                         const isVacEditing = editingVacId === vac.id && !isNewVac;
+                        const isPrep = (vac.type || 'vacation') === 'preparation';
+                        const bgClass = isPrep ? 'bg-orange-500/5' : 'bg-amber-500/5';
+                        const bgEditClass = isPrep ? 'bg-orange-500/10' : 'bg-amber-500/10';
                         return (
-                          <tr key={vac.id} className={cn('border-b bg-amber-500/5', isVacEditing && 'bg-amber-500/10')}>
-                            <td></td>
+                          <tr key={vac.id} className={cn('border-b', bgClass, isVacEditing && bgEditClass)}>
+                            <td className="py-1.5 px-3 text-xs">
+                              {isVacEditing ? (
+                                <select value={vacType} onChange={(e) => setVacType(e.target.value as ShampafVacationType)} className={cn(inputClass, 'dark:bg-slate-800 dark:text-white')}>
+                                  <option value="vacation">חופשה</option>
+                                  <option value="preparation">התארגנות</option>
+                                </select>
+                              ) : (
+                                <span className={isPrep ? 'text-orange-400' : 'text-amber-300'}>{isPrep ? 'התארגנות' : 'חופשה'}</span>
+                              )}
+                            </td>
                             <td className="py-1.5 px-3 text-xs">
                               {isVacEditing ? (
                                 <input type="text" value={vacReason} onChange={(e) => setVacReason(e.target.value)} className={inputClass} />
                               ) : (
-                                <span className="text-amber-300">{vac.reason || 'חופשה'}</span>
+                                <span className={isPrep ? 'text-orange-300' : 'text-amber-300'}>{vac.reason || (isPrep ? 'התארגנות' : 'חופשה')}</span>
                               )}
                             </td>
                             <td className="py-1.5 px-3 text-xs">
@@ -357,7 +384,7 @@ export function ShampafTable({ entries, vacations, soldiers }: ShampafTableProps
 
                       {entryVacs.length === 0 && !(isNewVac && vacParentId === entry.id) && (
                         <tr className="bg-amber-500/5">
-                          <td colSpan={7} className="py-2 text-center text-xs text-muted-foreground">אין חופשות</td>
+                          <td colSpan={7} className="py-2 text-center text-xs text-muted-foreground">אין חופשות / התארגנות</td>
                         </tr>
                       )}
                     </>

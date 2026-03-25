@@ -81,13 +81,17 @@ export function ShampafPage() {
             color: SHAMPAF_COLORS.mobilized,
             tooltip: `שמ"פ: ${formatDate(entry.startDateTime.split('T')[0]!)} - ${formatDate(entry.endDateTime.split('T')[0]!)}`,
           })),
-          ...soldierVacations.map((vac) => ({
-            id: vac.id,
-            startDateTime: vac.startDateTime,
-            endDateTime: vac.endDateTime,
-            color: SHAMPAF_COLORS.vacation,
-            tooltip: `חופשה: ${vac.reason || ''} ${formatDate(vac.startDateTime.split('T')[0]!)} - ${formatDate(vac.endDateTime.split('T')[0]!)}`,
-          })),
+          ...soldierVacations.map((vac) => {
+            const isPrep = (vac.type || 'vacation') === 'preparation';
+            const typeLabel = isPrep ? 'התארגנות' : 'חופשה';
+            return {
+              id: vac.id,
+              startDateTime: vac.startDateTime,
+              endDateTime: vac.endDateTime,
+              color: isPrep ? SHAMPAF_COLORS.preparation : SHAMPAF_COLORS.vacation,
+              tooltip: `${typeLabel}: ${vac.reason || ''} ${formatDate(vac.startDateTime.split('T')[0]!)} - ${formatDate(vac.endDateTime.split('T')[0]!)}`,
+            };
+          }),
         ];
 
         return {
@@ -183,7 +187,7 @@ export function ShampafPage() {
               { key: 'role', label: 'תפקיד' },
             ]}
             onGenerate={(date, prefs) =>
-              generateShampafStatusReport(date, allEntries ?? [], allAssignments ?? [], soldiers, tanks ?? [], prefs)
+              generateShampafStatusReport(date, allEntries ?? [], allAssignments ?? [], soldiers, tanks ?? [], prefs, vacations ?? [])
             }
           />
         </div>
