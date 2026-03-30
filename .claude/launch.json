@@ -4,8 +4,8 @@
     {
       "name": "dev",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5200", "--strictPort"],
-      "port": 5200
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5201", "--strictPort"],
+      "port": 5201
     }
   ]
 }

@@ -14,7 +14,26 @@
       "Bash(gh repo:*)",
       "Bash(npm uninstall:*)",
       "Bash(find '/c/Users/zomer/CLAUDE CODE/pluga operations' -maxdepth 2 -name tailwind* -o -name postcss*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(chmod +x \"/c/Users/zomer/CLAUDE CODE/pluga operations/scripts/security-check.sh\")",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 21208 //F)",
+      "Bash(taskkill //PID 21208 //F //T)",
+      "Bash(wmic process:*)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"\\\\.innerHTML\\\\|dangerously\\\\|script\\\\|<script\" 'C:\\\\Users\\\\zomer\\\\CLAUDE CODE\\\\pluga operations\\\\src' --include=*.tsx --include=*.ts)",
+      "Bash(npx firebase:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(where firebase:*)",
+      "Bash(npm list:*)",
+      "Bash(firebase login:*)",
+      "Read(//c/Users/zomer/CLAUDE CODE/pluga operations/$APPDATA/npm/node_modules/firebase-tools/lib/**)",
+      "Read(//c/Users/zomer/CLAUDE CODE/pluga operations/$APPDATA/**)",
+      "Bash(npm root:*)",
+      "Bash(npm bin:*)",
+      "Read(//c/Users/zomer/**)",
+      "Bash(npm audit:*)"
     ]
   }
 }
