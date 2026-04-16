@@ -3,28 +3,17 @@ import { getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/fires
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
-const requiredEnvVars = [
-  'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
-  'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET',
-  'VITE_FIREBASE_MESSAGING_SENDER_ID',
-  'VITE_FIREBASE_APP_ID',
-] as const;
-
-for (const key of requiredEnvVars) {
-  if (!import.meta.env[key]) {
-    throw new Error(`Missing required environment variable: ${key}. Check your .env file.`);
-  }
-}
-
+// Firebase web config is PUBLIC by design — it's always embedded in the
+// client bundle and visible to any user. Real security is enforced by
+// Firestore security rules (firestore.rules) and Storage rules (storage.rules).
+// See: https://firebase.google.com/docs/projects/api-keys
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyA-Y0nio7WWw6KkAT2rLXr6QBWicsQ3q5s',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'pluga-ops.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'pluga-ops',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'pluga-ops.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '316977351638',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:316977351638:web:8d70caa7e60bd9ee78b277',
 };
 
 const app = initializeApp(firebaseConfig);
