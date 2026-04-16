@@ -234,7 +234,7 @@ service cloud.firestore {
     }
 
     // Changelog entries for routine (append-only)
-    match /routineChangelog/{logDoc} {
+    match /routineChangeLogs/{logDoc} {
       allow read: if canRead();
       allow create: if canWrite();
       allow update, delete: if false;
