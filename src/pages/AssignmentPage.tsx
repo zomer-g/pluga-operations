@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CalendarClock, Plus, Truck, FolderPlus, Users, Car, FileText, Pencil } from 'lucide-react';
+import { CalendarClock, Plus, Truck, FolderPlus, Users, Car, FileText, Pencil, Download, Copy, Check } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import { noonToday, noonTomorrow, dateRangesOverlap } from '@/lib/utils';
 import type { CrewRole, VehicleCategory } from '@/db/schema';
 import { ReportSection } from '@/components/reports/ReportSection';
 import { generateAssignmentDailyReport, generateAssignmentChangesReport } from '@/lib/report-generators';
+import { downloadCSV, copyTableToClipboard } from '@/lib/export-utils';
 
 type GroupBy = 'vehicle' | 'soldier';
 
@@ -333,6 +334,57 @@ export function AssignmentPage() {
 
   const isLoaded = assignments && soldiers && tanks && conflicts;
 
+  const [copiedAssignments, setCopiedAssignments] = useState(false);
+
+  const buildAssignmentRows = (): { headers: string[]; rows: string[][] } => {
+    const headers = ['מחלקה', 'רכב', 'תפקיד', 'חייל', 'תאריך התחלה', 'תאריך סיום'];
+    const rows: string[][] = [];
+    if (!assignments || !soldiers || !tanks) return { headers, rows };
+
+    const deptMap = new Map((departments ?? []).map(d => [d.id, d.name]));
+    const soldierMap = new Map(soldiers.map(s => [s.id, s]));
+
+    const sorted = [...assignments].sort((a, b) => {
+      const tA = tanks.find(t => t.id === a.tankId);
+      const tB = tanks.find(t => t.id === b.tankId);
+      const dA = tA?.departmentId ? deptMap.get(tA.departmentId) ?? '' : '';
+      const dB = tB?.departmentId ? deptMap.get(tB.departmentId) ?? '' : '';
+      if (dA !== dB) return dA.localeCompare(dB, 'he');
+      const vA = tA?.designation ?? '';
+      const vB = tB?.designation ?? '';
+      if (vA !== vB) return vA.localeCompare(vB, 'he');
+      const rA = a.role ? ROLE_DISPLAY_ORDER.indexOf(a.role) : ROLE_DISPLAY_ORDER.length;
+      const rB = b.role ? ROLE_DISPLAY_ORDER.indexOf(b.role) : ROLE_DISPLAY_ORDER.length;
+      return rA - rB;
+    });
+
+    for (const a of sorted) {
+      const tank = a.tankId ? tanks.find(t => t.id === a.tankId) : null;
+      const deptName = tank?.departmentId ? (deptMap.get(tank.departmentId) ?? '') : '';
+      const vehicleName = tank?.designation ?? (a.missionName ?? 'משימה כללית');
+      const role = a.type === 'tank_role' && a.role ? getCrewRoleLabel(a.role) : (a.type === 'general_mission' ? 'משימה' : '');
+      const s = soldierMap.get(a.soldierId);
+      const soldierName = s ? `${s.firstName} ${s.lastName}` : '';
+      const start = new Date(a.startDateTime).toLocaleDateString('he-IL');
+      const end = new Date(a.endDateTime).toLocaleDateString('he-IL');
+      rows.push([deptName, vehicleName, role, soldierName, start, end]);
+    }
+    return { headers, rows };
+  };
+
+  const handleExportAssignmentCSV = () => {
+    const { headers, rows } = buildAssignmentRows();
+    const date = new Date().toISOString().split('T')[0];
+    downloadCSV(`שיבוץ-חיילים-${date}.csv`, headers, rows);
+  };
+
+  const handleCopyAssignments = async () => {
+    const { headers, rows } = buildAssignmentRows();
+    await copyTableToClipboard(headers, rows);
+    setCopiedAssignments(true);
+    setTimeout(() => setCopiedAssignments(false), 2000);
+  };
+
   // Sort tanks by department then by designation, with role order enforcement
   const sortedTanks = useMemo(() => {
     if (!tanks) return [];
@@ -375,6 +427,14 @@ export function AssignmentPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-bold">שיבוץ חיילים</h2>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={handleExportAssignmentCSV} disabled={!isLoaded}>
+            <Download className="h-4 w-4 ml-1" />
+            CSV
+          </Button>
+          <Button size="sm" variant={copiedAssignments ? 'default' : 'outline'} onClick={handleCopyAssignments} disabled={!isLoaded}>
+            {copiedAssignments ? <Check className="h-4 w-4 ml-1" /> : <Copy className="h-4 w-4 ml-1" />}
+            {copiedAssignments ? 'הועתק' : 'העתק'}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setShowDeptDialog(true)}>
             <FolderPlus className="h-4 w-4 ml-1" />
             מחלקה חדשה

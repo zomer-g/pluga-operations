@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Plus, Clock, User, FolderPlus, Pencil } from 'lucide-react';
+import { Calendar, Plus, Clock, User, FolderPlus, Pencil, Download, Copy, Check } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,7 @@ import {
 import { useSoldiers } from '@/hooks/useSoldiers';
 import { getCrewRoleLabel, ROLE_DISPLAY_ORDER, VEHICLE_CATEGORIES } from '@/lib/constants';
 import type { CrewRole, Assignment, VehicleCategory } from '@/db/schema';
+import { downloadCSV, copyTableToClipboard } from '@/lib/export-utils';
 
 export function RoutinePage() {
   const templates = useRoutineTemplates();
@@ -175,6 +176,49 @@ export function RoutinePage() {
     }
   }
 
+  const [copiedRoutine, setCopiedRoutine] = useState(false);
+
+  const buildRoutineRows = (): { headers: string[]; rows: string[][] } => {
+    const headers = ['מחלקה', 'רכב', 'תפקיד', 'חייל'];
+    const rows: string[][] = [];
+    for (const group of templatesByDept) {
+      for (const tmpl of group.templates) {
+        const vehicle = vehicles.find(v => v.id === tmpl.tankId);
+        const sortedSlots = [...(tmpl.crewSlots ?? [])].sort((a, b) => {
+          const oa = ROLE_DISPLAY_ORDER.indexOf(a.role);
+          const ob = ROLE_DISPLAY_ORDER.indexOf(b.role);
+          return oa - ob;
+        });
+        if (sortedSlots.length === 0) {
+          rows.push([group.deptName, vehicle?.designation ?? tmpl.name, '', '']);
+        }
+        for (const slot of sortedSlots) {
+          const s = soldiers.find(s => s.id === slot.soldierId);
+          rows.push([
+            group.deptName,
+            vehicle?.designation ?? tmpl.name,
+            getCrewRoleLabel(slot.role),
+            s ? `${s.firstName} ${s.lastName}` : '',
+          ]);
+        }
+      }
+    }
+    return { headers, rows };
+  };
+
+  const handleExportRoutineCSV = () => {
+    const { headers, rows } = buildRoutineRows();
+    const date = new Date().toISOString().split('T')[0];
+    downloadCSV(`שגרת-שיבוץ-${date}.csv`, headers, rows);
+  };
+
+  const handleCopyRoutine = async () => {
+    const { headers, rows } = buildRoutineRows();
+    await copyTableToClipboard(headers, rows);
+    setCopiedRoutine(true);
+    setTimeout(() => setCopiedRoutine(false), 2000);
+  };
+
   const getFilteredSoldiers = () => {
     const role = assignDialog.role;
     // Filter out already-assigned soldiers
@@ -193,6 +237,14 @@ export function RoutinePage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-bold">שגרת שיבוץ</h2>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={handleExportRoutineCSV}>
+            <Download className="h-4 w-4 ml-1" />
+            CSV
+          </Button>
+          <Button size="sm" variant={copiedRoutine ? 'default' : 'outline'} onClick={handleCopyRoutine}>
+            {copiedRoutine ? <Check className="h-4 w-4 ml-1" /> : <Copy className="h-4 w-4 ml-1" />}
+            {copiedRoutine ? 'הועתק' : 'העתק'}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setShowLogDialog(true)}>
             <Clock className="h-4 w-4 ml-1" />
             יומן שינויים
