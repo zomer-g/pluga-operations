@@ -30,12 +30,6 @@ function parseHebrewSize(raw: string): { top?: ClothingSize; bottom?: ClothingSi
   return {};
 }
 
-function parseEnglishSize(raw: string): ClothingSize | undefined {
-  const normalized = raw.trim().toUpperCase();
-  const valid: ClothingSize[] = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
-  return valid.find(s => s === normalized);
-}
-
 interface CsvSoldierSizes {
   personalId: string;
   uniformsB: string;
@@ -120,7 +114,7 @@ export async function migrateSizesFromCsv(csvContent: string): Promise<Migration
     if (mid) soldiersByMilitaryId.set(mid, { docId: d.id, data });
   }
 
-  const updates: { docId: string; fields: Record<string, unknown>; name: string }[] = [];
+  const updates: { docId: string; fields: Record<string, string | number>; name: string }[] = [];
 
   for (const csv of csvSoldiers) {
     const match = soldiersByMilitaryId.get(csv.personalId);
@@ -129,7 +123,7 @@ export async function migrateSizesFromCsv(csvContent: string): Promise<Migration
       continue;
     }
 
-    const fields: Record<string, unknown> = {};
+    const fields: Record<string, string | number> = {};
     const { top, bottom } = parseHebrewSize(csv.uniformsB);
 
     if (top && !match.data.uniformSizeTop) fields.uniformSizeTop = top;
