@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Download, Upload, Plus, Trash2, Moon, Sun, Database, FileUp, HardDrive } from 'lucide-react';
+import { Download, Upload, Plus, Trash2, Moon, Sun, Database, FileUp, HardDrive, Ruler } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -46,6 +46,33 @@ export function SettingsPage() {
   };
   const [legacyStatus, setLegacyStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [legacyLoading, setLegacyLoading] = useState(false);
+
+  // Size migration
+  const sizeMigrationRef = useRef<HTMLInputElement>(null);
+  const [sizeMigrationStatus, setSizeMigrationStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [sizeMigrationLoading, setSizeMigrationLoading] = useState(false);
+
+  const handleSizeMigration = async () => {
+    const file = sizeMigrationRef.current?.files?.[0];
+    if (!file) {
+      setSizeMigrationStatus({ type: 'error', message: 'יש לבחור קובץ CSV' });
+      return;
+    }
+    setSizeMigrationLoading(true);
+    setSizeMigrationStatus(null);
+    try {
+      const csvContent = await file.text();
+      const { migrateSizesFromCsv } = await import('@/db/migrate-sizes');
+      const result = await migrateSizesFromCsv(csvContent);
+      const parts = [`${result.updated} חיילים עודכנו`];
+      if (result.skipped > 0) parts.push(`${result.skipped} דולגו (כבר יש מידות)`);
+      if (result.notFound.length > 0) parts.push(`${result.notFound.length} מ"א לא נמצאו`);
+      setSizeMigrationStatus({ type: 'success', message: parts.join(', ') });
+    } catch (err) {
+      setSizeMigrationStatus({ type: 'error', message: 'שגיאה: ' + (err instanceof Error ? err.message : String(err)) });
+    }
+    setSizeMigrationLoading(false);
+  };
 
   const handleLegacyImport = async () => {
     const readFile = async (ref: React.RefObject<HTMLInputElement | null>) => {
@@ -309,6 +336,38 @@ export function SettingsPage() {
                 : 'bg-destructive/10 text-destructive'
             }`}>
               {legacyStatus.message}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Size migration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Ruler className="h-5 w-5" />
+            ייבוא מידות מקובץ חיילים
+          </CardTitle>
+          <CardDescription>
+            העלה קובץ CSV מהמערכת הישנה. המערכת תתאים חיילים לפי מספר אישי ותעדכן מידות חסרות בלבד (חולצה, מכנסיים, נעליים).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-xs">קובץ CSV עם נתוני חיילים</Label>
+            <Input ref={sizeMigrationRef} type="file" accept=".csv" className="h-9 text-sm" />
+          </div>
+          <Button onClick={handleSizeMigration} disabled={sizeMigrationLoading || !isAdmin} className="w-full">
+            <Ruler className="h-4 w-4 me-2" />
+            {sizeMigrationLoading ? 'מעדכן מידות...' : 'עדכן מידות'}
+          </Button>
+          {sizeMigrationStatus && (
+            <div className={`p-3 rounded-lg text-sm ${
+              sizeMigrationStatus.type === 'success'
+                ? 'bg-status-active/10 text-status-active'
+                : 'bg-destructive/10 text-destructive'
+            }`}>
+              {sizeMigrationStatus.message}
             </div>
           )}
         </CardContent>
