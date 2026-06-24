@@ -15,6 +15,13 @@ export const soldierSchema = z.object({
   uniformSizeBottom: z.string().optional().or(z.literal('')),
   shoeSize: z.coerce.number().optional(),
   helmetSize: z.string().optional(),
+  personalItems: z.object({
+    uniformsB: z.string().optional().or(z.literal('')),
+    overalls: z.string().optional().or(z.literal('')),
+    underwear: z.string().optional().or(z.literal('')),
+    shoes: z.string().optional().or(z.literal('')),
+    cigarettes: z.string().optional().or(z.literal('')),
+  }).optional(),
   platoonId: z.string().optional(),
   squadId: z.string().optional(),
   trainedRole: z.enum(['commander', 'gunner', 'driver', 'loader']).optional().or(z.literal('')),

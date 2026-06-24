@@ -1,44 +1,17 @@
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { requireAdminPermission } from '@/lib/check-permission';
-import type { ClothingSize } from '@/db/schema';
 
-const HEBREW_SIZE_MAP: Record<string, ClothingSize> = {
-  'ק': 'S',
-  'ב': 'M',
-  'ג': 'L',
-  'מ': 'XL',
-  'ממ': 'XXL',
-};
-
-function parseHebrewSize(raw: string): { top?: ClothingSize; bottom?: ClothingSize } {
-  const trimmed = raw.trim();
-  if (!trimmed) return {};
-
-  // Handle special case: "ב במכנס, ג' בחולצה"
-  const splitMatch = trimmed.match(/([קבגמ]{1,2})\s*(?:ב|')?\s*במכנס.*?([קבגמ]{1,2})\s*(?:ב|')?\s*בחולצה/);
-  if (splitMatch) {
-    return {
-      bottom: HEBREW_SIZE_MAP[splitMatch[1]!],
-      top: HEBREW_SIZE_MAP[splitMatch[2]!],
-    };
-  }
-
-  const size = HEBREW_SIZE_MAP[trimmed];
-  if (size) return { top: size, bottom: size };
-
-  return {};
-}
-
-interface CsvSoldierSizes {
+interface CsvSoldierItems {
   personalId: string;
   uniformsB: string;
   overalls: string;
   underwear: string;
   shoes: string;
+  cigarettes: string;
 }
 
-function parseCsvRow(row: string): CsvSoldierSizes | null {
+function parseCsvRow(row: string): CsvSoldierItems | null {
   const fields: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -75,15 +48,16 @@ function parseCsvRow(row: string): CsvSoldierSizes | null {
       overalls: items.overalls ?? '',
       underwear: items.underwear ?? '',
       shoes: items.shoes ?? '',
+      cigarettes: items.cigarettes ?? '',
     };
   } catch {
     return null;
   }
 }
 
-export function parseCsvSizes(csvContent: string): CsvSoldierSizes[] {
+function parseCsv(csvContent: string): CsvSoldierItems[] {
   const lines = csvContent.split('\n');
-  const results: CsvSoldierSizes[] = [];
+  const results: CsvSoldierItems[] = [];
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i]!.trim();
     if (!line) continue;
@@ -103,7 +77,7 @@ export interface MigrationResult {
 export async function migrateSizesFromCsv(csvContent: string): Promise<MigrationResult> {
   await requireAdminPermission('/settings');
 
-  const csvSoldiers = parseCsvSizes(csvContent);
+  const csvSoldiers = parseCsv(csvContent);
   const result: MigrationResult = { updated: 0, skipped: 0, notFound: [], details: [] };
 
   const snap = await getDocs(collection(db, 'soldiers'));
@@ -114,7 +88,8 @@ export async function migrateSizesFromCsv(csvContent: string): Promise<Migration
     if (mid) soldiersByMilitaryId.set(mid, { docId: d.id, data });
   }
 
-  const updates: { docId: string; fields: Record<string, string | number>; name: string }[] = [];
+  interface UpdateEntry { docId: string; personalItems: Record<string, string>; name: string }
+  const updates: UpdateEntry[] = [];
 
   for (const csv of csvSoldiers) {
     const match = soldiersByMilitaryId.get(csv.personalId);
@@ -123,30 +98,33 @@ export async function migrateSizesFromCsv(csvContent: string): Promise<Migration
       continue;
     }
 
-    const fields: Record<string, string | number> = {};
-    const { top, bottom } = parseHebrewSize(csv.uniformsB);
+    const existing = (match.data.personalItems ?? {}) as Record<string, string>;
+    const personalItems: Record<string, string> = { ...existing };
+    let changed = false;
 
-    if (top && !match.data.uniformSizeTop) fields.uniformSizeTop = top;
-    if (bottom && !match.data.uniformSizeBottom) fields.uniformSizeBottom = bottom;
+    for (const key of ['uniformsB', 'overalls', 'underwear', 'shoes', 'cigarettes'] as const) {
+      const val = csv[key].trim();
+      if (val && !existing[key]) {
+        personalItems[key] = val;
+        changed = true;
+      }
+    }
 
-    const shoeNum = csv.shoes ? parseInt(csv.shoes, 10) : NaN;
-    if (!isNaN(shoeNum) && !match.data.shoeSize) fields.shoeSize = shoeNum;
-
-    if (Object.keys(fields).length === 0) {
+    if (!changed) {
       result.skipped++;
       continue;
     }
 
     const name = `${match.data.firstName ?? ''} ${match.data.lastName ?? ''}`.trim();
-    updates.push({ docId: match.docId, fields, name });
+    updates.push({ docId: match.docId, personalItems, name });
   }
 
   for (let i = 0; i < updates.length; i += 500) {
     const batch = writeBatch(db);
     const chunk = updates.slice(i, i + 500);
     for (const u of chunk) {
-      batch.update(doc(db, 'soldiers', u.docId), u.fields);
-      const fieldDesc = Object.entries(u.fields).map(([k, v]) => `${k}=${v}`).join(', ');
+      batch.update(doc(db, 'soldiers', u.docId), { personalItems: u.personalItems });
+      const fieldDesc = Object.entries(u.personalItems).map(([k, v]) => `${k}=${v}`).join(', ');
       result.details.push(`${u.name}: ${fieldDesc}`);
     }
     await batch.commit();

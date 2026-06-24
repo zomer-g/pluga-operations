@@ -120,9 +120,11 @@ export function SoldierProfilePage() {
                   <InfoItem label="איש קשר חירום" value={soldier.emergencyContact ?? '-'} />
                   <InfoItem label="טלפון חירום" value={soldier.emergencyPhone ?? '-'} dir="ltr" />
                   <InfoItem label="סוג דם" value={soldier.bloodType ?? '-'} />
-                  <InfoItem label="מידת חולצה" value={soldier.uniformSizeTop ?? '-'} />
-                  <InfoItem label="מידת מכנסיים" value={soldier.uniformSizeBottom ?? '-'} />
-                  <InfoItem label="מידת נעליים" value={soldier.shoeSize != null ? String(soldier.shoeSize) : '-'} />
+                  <InfoItem label="מדי ב'" value={soldier.personalItems?.uniformsB ?? soldier.uniformSizeTop ?? '-'} />
+                  <InfoItem label="סרבלים" value={soldier.personalItems?.overalls ?? '-'} />
+                  <InfoItem label="נעליים" value={soldier.personalItems?.shoes ?? (soldier.shoeSize != null ? String(soldier.shoeSize) : '-')} />
+                  <InfoItem label="תחתונים" value={soldier.personalItems?.underwear ?? '-'} />
+                  <InfoItem label="סיגריות" value={soldier.personalItems?.cigarettes ?? '-'} />
                   <InfoItem label="מידת קסדה" value={soldier.helmetSize ?? '-'} />
                 </div>
                 {soldier.medicalNotes && (

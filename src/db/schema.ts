@@ -64,6 +64,13 @@ export interface Soldier {
   uniformSizeBottom?: ClothingSize;
   shoeSize?: number;
   helmetSize?: string;
+  personalItems?: {
+    uniformsB?: string;
+    overalls?: string;
+    underwear?: string;
+    shoes?: string;
+    cigarettes?: string;
+  };
   platoonId?: string;
   squadId?: string;
   trainedRole?: CrewRole;

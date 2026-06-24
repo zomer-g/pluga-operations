@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { soldierSchema, type SoldierFormData } from '@/lib/validators';
-import { RANKS, BLOOD_TYPES, CLOTHING_SIZES, CREW_ROLES } from '@/lib/constants';
+import { RANKS, BLOOD_TYPES, CREW_ROLES } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,6 +43,13 @@ export function SoldierForm({ soldier, onSubmit, onCancel }: SoldierFormProps) {
           uniformSizeBottom: soldier.uniformSizeBottom,
           shoeSize: soldier.shoeSize,
           helmetSize: soldier.helmetSize ?? '',
+          personalItems: {
+            uniformsB: soldier.personalItems?.uniformsB ?? '',
+            overalls: soldier.personalItems?.overalls ?? '',
+            underwear: soldier.personalItems?.underwear ?? '',
+            shoes: soldier.personalItems?.shoes ?? '',
+            cigarettes: soldier.personalItems?.cigarettes ?? '',
+          },
           platoonId: soldier.platoonId ?? '',
           trainedRole: soldier.trainedRole ?? '',
         }
@@ -59,8 +66,6 @@ export function SoldierForm({ soldier, onSubmit, onCancel }: SoldierFormProps) {
   const currentRank = watch('rank');
   const currentTrainedRole = watch('trainedRole');
   const currentBlood = watch('bloodType');
-  const currentSizeTop = watch('uniformSizeTop');
-  const currentSizeBottom = watch('uniformSizeBottom');
   const currentPlatoon = watch('platoonId');
 
   return (
@@ -143,33 +148,24 @@ export function SoldierForm({ soldier, onSubmit, onCancel }: SoldierFormProps) {
             {errors.bloodType && <p className="text-xs text-destructive">{errors.bloodType.message}</p>}
           </div>
           <div className="space-y-2">
-            <Label>מידת חולצה</Label>
-            <Select value={currentSizeTop} onValueChange={(v) => setValue('uniformSizeTop', v)}>
-              <SelectTrigger><SelectValue placeholder="בחר" /></SelectTrigger>
-              <SelectContent>
-                {CLOTHING_SIZES.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.uniformSizeTop && <p className="text-xs text-destructive">{errors.uniformSizeTop.message}</p>}
+            <Label htmlFor="pi-uniformsB">מדי ב'</Label>
+            <Input id="pi-uniformsB" {...register('personalItems.uniformsB')} placeholder='ק / ב / ג / מ / ממ' />
           </div>
           <div className="space-y-2">
-            <Label>מידת מכנסיים</Label>
-            <Select value={currentSizeBottom} onValueChange={(v) => setValue('uniformSizeBottom', v)}>
-              <SelectTrigger><SelectValue placeholder="בחר" /></SelectTrigger>
-              <SelectContent>
-                {CLOTHING_SIZES.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.uniformSizeBottom && <p className="text-xs text-destructive">{errors.uniformSizeBottom.message}</p>}
+            <Label htmlFor="pi-overalls">סרבלים</Label>
+            <Input id="pi-overalls" {...register('personalItems.overalls')} placeholder="S / M / L / XL" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="shoeSize">מידת נעליים</Label>
-            <Input id="shoeSize" type="number" {...register('shoeSize')} />
-            {errors.shoeSize && <p className="text-xs text-destructive">{errors.shoeSize.message}</p>}
+            <Label htmlFor="pi-shoes">נעליים</Label>
+            <Input id="pi-shoes" {...register('personalItems.shoes')} placeholder="42" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pi-underwear">תחתונים</Label>
+            <Input id="pi-underwear" {...register('personalItems.underwear')} placeholder="S / M / L / XL" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pi-cigarettes">סיגריות</Label>
+            <Input id="pi-cigarettes" {...register('personalItems.cigarettes')} placeholder="לא מעשן" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="helmetSize">מידת קסדה</Label>

@@ -24,9 +24,10 @@ export function ReportsPage() {
     if (!soldiers) return;
     setExporting('soldiers');
 
-    const headers = ['מספר אישי', 'דרגה', 'שם פרטי', 'שם משפחה', 'טלפון', 'אימייל', 'סוג דם', 'חולצה', 'מכנסיים', 'נעליים', 'סטטוס'];
+    const headers = ['מספר אישי', 'דרגה', 'שם פרטי', 'שם משפחה', 'טלפון', 'אימייל', 'סוג דם', "מדי ב'", 'סרבלים', 'נעליים', 'תחתונים', 'סיגריות', 'סטטוס'];
     const rows = soldiers.map((s) => {
       const status = currentStatuses?.get(s.id);
+      const pi = s.personalItems;
       return [
         s.militaryId ?? '',
         s.rank ? getRankLabel(s.rank) : '',
@@ -35,9 +36,11 @@ export function ReportsPage() {
         s.phoneNumber ?? '',
         s.email ?? '',
         s.bloodType ?? '',
-        s.uniformSizeTop ?? '',
-        s.uniformSizeBottom ?? '',
-        s.shoeSize != null ? String(s.shoeSize) : '',
+        pi?.uniformsB ?? '',
+        pi?.overalls ?? '',
+        pi?.shoes ?? '',
+        pi?.underwear ?? '',
+        pi?.cigarettes ?? '',
         status ? getStatusInfo(status.status).label : '',
       ];
     });
