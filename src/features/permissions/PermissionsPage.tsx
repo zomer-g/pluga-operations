@@ -295,6 +295,7 @@ function UsersTab() {
       email: user.email,
       displayName: user.displayName,
       groupIds: newGroupIds,
+      customPageOverrides: user.customPageOverrides,
     });
   };
 

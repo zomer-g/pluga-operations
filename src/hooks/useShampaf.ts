@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { useMemo } from 'react';
+import { useCollection, getCollection, setDoc, updateDoc, deleteDoc, writeBatch } from '@/lib/datastore';
 import type { ShampafEntry, ShampafVacation } from '@/db/schema';
 import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
@@ -8,103 +7,55 @@ import { requireEditPermission } from '@/lib/check-permission';
 // ===== Queries =====
 
 export function useShampafEntries(soldierId?: string) {
-  const [entries, setEntries] = useState<ShampafEntry[] | undefined>();
-
-  useEffect(() => {
-    const q = soldierId
-      ? query(collection(db, 'shampafEntries'), where('soldierId', '==', soldierId))
-      : query(collection(db, 'shampafEntries'));
-    const unsub = onSnapshot(q, (snap) => {
-      setEntries(snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry)));
-    });
-    return unsub;
-  }, [soldierId]);
-
-  return entries;
+  const all = useCollection<ShampafEntry>('shampafEntries');
+  return useMemo(
+    () => (soldierId ? all?.filter(e => e.soldierId === soldierId) : all),
+    [all, soldierId],
+  );
 }
 
 export function useShampafVacations(shampafEntryId?: string) {
-  const [vacations, setVacations] = useState<ShampafVacation[] | undefined>();
-
-  useEffect(() => {
-    const q = shampafEntryId
-      ? query(collection(db, 'shampafVacations'), where('shampafEntryId', '==', shampafEntryId))
-      : query(collection(db, 'shampafVacations'));
-    const unsub = onSnapshot(q, (snap) => {
-      setVacations(snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafVacation)));
-    });
-    return unsub;
-  }, [shampafEntryId]);
-
-  return vacations;
+  const all = useCollection<ShampafVacation>('shampafVacations');
+  return useMemo(
+    () => (shampafEntryId ? all?.filter(v => v.shampafEntryId === shampafEntryId) : all),
+    [all, shampafEntryId],
+  );
 }
 
 export function useAllShampafVacations() {
-  const [vacations, setVacations] = useState<ShampafVacation[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'shampafVacations'), (snap) => {
-      setVacations(snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafVacation)));
-    });
-    return unsub;
-  }, []);
-
-  return vacations;
+  return useCollection<ShampafVacation>('shampafVacations');
 }
 
 export function useShampafForDateRange(startDate: string, endDate: string) {
-  const [entries, setEntries] = useState<ShampafEntry[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'shampafEntries'), (snap) => {
-      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
-      setEntries(all.filter(e => dateRangesOverlap(e.startDateTime, e.endDateTime, startDate, endDate)));
-    });
-    return unsub;
-  }, [startDate, endDate]);
-
-  return entries;
+  const all = useCollection<ShampafEntry>('shampafEntries');
+  return useMemo(
+    () => all?.filter(e => dateRangesOverlap(e.startDateTime, e.endDateTime, startDate, endDate)),
+    [all, startDate, endDate],
+  );
 }
 
 export type ShampafStatus = 'mobilized' | 'vacation' | 'preparation' | 'none';
 
 export function useSoldierShampafStatus(soldierId: string | undefined, dateTime?: string): ShampafStatus | undefined {
-  const [status, setStatus] = useState<ShampafStatus | undefined>();
+  const entries = useCollection<ShampafEntry>('shampafEntries');
+  const vacations = useCollection<ShampafVacation>('shampafVacations');
 
-  useEffect(() => {
-    if (!soldierId) {
-      setStatus('none');
-      return;
+  return useMemo(() => {
+    if (!soldierId) return 'none';
+    if (!entries || !vacations) return undefined;
+
+    const now = dateTime ?? new Date().toISOString();
+    const activeEntry = entries.find(e => e.soldierId === soldierId && e.startDateTime <= now && e.endDateTime >= now);
+    if (!activeEntry) return 'none';
+
+    const activeVac = vacations.find(v =>
+      v.shampafEntryId === activeEntry.id && v.startDateTime <= now && v.endDateTime >= now
+    );
+    if (activeVac) {
+      return (activeVac.type || 'vacation') === 'preparation' ? 'preparation' : 'vacation';
     }
-
-    // Listen to shampaf entries for this soldier
-    const q = query(collection(db, 'shampafEntries'), where('soldierId', '==', soldierId));
-    const unsub = onSnapshot(q, async (snap) => {
-      const now = dateTime ?? new Date().toISOString();
-      const entries = snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
-      const activeEntry = entries.find(e => e.startDateTime <= now && e.endDateTime >= now);
-
-      if (!activeEntry) {
-        setStatus('none');
-        return;
-      }
-
-      // Check vacations for the active entry
-      const vacSnap = await getDocs(
-        query(collection(db, 'shampafVacations'), where('shampafEntryId', '==', activeEntry.id))
-      );
-      const vacations = vacSnap.docs.map(d => d.data() as ShampafVacation);
-      const activeVac = vacations.find(v => v.startDateTime <= now && v.endDateTime >= now);
-      if (activeVac) {
-        setStatus((activeVac.type || 'vacation') === 'preparation' ? 'preparation' : 'vacation');
-      } else {
-        setStatus('mobilized');
-      }
-    });
-    return unsub;
-  }, [soldierId, dateTime]);
-
-  return status;
+    return 'mobilized';
+  }, [entries, vacations, soldierId, dateTime]);
 }
 
 // Checks shampaf status for a soldier at a given time (non-hook version for mutations)
@@ -113,23 +64,19 @@ export async function getSoldierShampafStatusAt(
   startDT: string,
   endDT: string
 ): Promise<{ covered: boolean; onVacation: boolean }> {
-  const entriesSnap = await getDocs(
-    query(collection(db, 'shampafEntries'), where('soldierId', '==', soldierId))
-  );
-  const entries = entriesSnap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
+  const [entries, vacations] = await Promise.all([
+    getCollection<ShampafEntry>('shampafEntries'),
+    getCollection<ShampafVacation>('shampafVacations'),
+  ]);
 
   const covering = entries.find(e =>
-    e.startDateTime <= startDT && e.endDateTime >= endDT
+    e.soldierId === soldierId && e.startDateTime <= startDT && e.endDateTime >= endDT
   );
 
   if (!covering) return { covered: false, onVacation: false };
 
-  const vacSnap = await getDocs(
-    query(collection(db, 'shampafVacations'), where('shampafEntryId', '==', covering.id))
-  );
-  const vacations = vacSnap.docs.map(d => d.data() as ShampafVacation);
-
   const onVacation = vacations.some(v =>
+    v.shampafEntryId === covering.id &&
     dateRangesOverlap(v.startDateTime, v.endDateTime, startDT, endDT)
   );
 
@@ -155,29 +102,19 @@ export async function addShampafEntry(data: {
     orderNumber: data.orderNumber,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'shampafEntries', id), stripUndefined(entry as unknown as any));
+  await setDoc('shampafEntries', id, stripUndefined(entry as unknown as any));
   return id;
 }
 
 export async function updateShampafEntry(id: string, data: Partial<ShampafEntry>): Promise<void> {
   await requireEditPermission('/shampaf');
-  await updateDoc(doc(db, 'shampafEntries', id), stripUndefined(data as any));
+  await updateDoc('shampafEntries', id, stripUndefined(data as any));
 }
 
 export async function deleteShampafEntry(id: string): Promise<void> {
   await requireEditPermission('/shampaf');
-  const batch = writeBatch(db);
-
-  // Cascade: delete child vacations
-  const vacSnap = await getDocs(
-    query(collection(db, 'shampafVacations'), where('shampafEntryId', '==', id))
-  );
-  vacSnap.docs.forEach(d => batch.delete(d.ref));
-
-  // Delete the entry itself
-  batch.delete(doc(db, 'shampafEntries', id));
-
-  await batch.commit();
+  // The database cascades to the entry's vacations.
+  await deleteDoc('shampafEntries', id);
 }
 
 export async function addShampafVacation(data: {
@@ -201,18 +138,18 @@ export async function addShampafVacation(data: {
     reason: data.reason,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'shampafVacations', id), stripUndefined(vacation as unknown as any));
+  await setDoc('shampafVacations', id, stripUndefined(vacation as unknown as any));
   return id;
 }
 
 export async function updateShampafVacation(id: string, data: Partial<ShampafVacation>): Promise<void> {
   await requireEditPermission('/shampaf');
-  await updateDoc(doc(db, 'shampafVacations', id), stripUndefined(data as any));
+  await updateDoc('shampafVacations', id, stripUndefined(data as any));
 }
 
 export async function deleteShampafVacation(id: string): Promise<void> {
   await requireEditPermission('/shampaf');
-  await deleteDoc(doc(db, 'shampafVacations', id));
+  await deleteDoc('shampafVacations', id);
 }
 
 // ===== Batch Operations =====
@@ -229,8 +166,7 @@ export async function checkShampafBatchConflicts(
   startDT: string,
   endDT: string,
 ): Promise<ShampafConflict[]> {
-  const snap = await getDocs(collection(db, 'shampafEntries'));
-  const allEntries = snap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
+  const allEntries = await getCollection<ShampafEntry>('shampafEntries');
   const conflicts: ShampafConflict[] = [];
 
   for (const sid of soldierIds) {
@@ -254,7 +190,7 @@ export async function addShampafEntriesBatch(
   entries: { soldierId: string; startDateTime: string; endDateTime: string; orderNumber?: string }[],
 ): Promise<{ ids: string[] }> {
   await requireEditPermission('/shampaf');
-  const batch = writeBatch(db);
+  const batch = writeBatch();
   const ids: string[] = [];
 
   for (const data of entries) {
@@ -267,7 +203,7 @@ export async function addShampafEntriesBatch(
       endDateTime: data.endDateTime,
       orderNumber: data.orderNumber,
     };
-    batch.set(doc(db, 'shampafEntries', id), stripUndefined(entry as unknown as any));
+    batch.set('shampafEntries', id, stripUndefined(entry as unknown as any));
   }
 
   await batch.commit();

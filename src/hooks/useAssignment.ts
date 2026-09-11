@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs, where, getDoc, writeBatch } from 'firebase/firestore';
-import { db } from '@/firebase';
-import type { Assignment, CrewRole, ShampafEntry, ShampafVacation } from '@/db/schema';
+import { useMemo } from 'react';
+import { useCollection, getCollection, setDoc, updateDoc, deleteDoc, writeBatch } from '@/lib/datastore';
+import type { Assignment, CrewRole, ShampafEntry, ShampafVacation, Soldier } from '@/db/schema';
 import { generateId, dateRangesOverlap, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
 import { getSoldierShampafStatusAt } from './useShampaf';
@@ -16,111 +15,87 @@ interface AssignmentFilters {
 }
 
 export function useAssignments(filters?: AssignmentFilters) {
-  const [assignments, setAssignments] = useState<Assignment[] | undefined>();
+  const all = useCollection<Assignment>('assignments');
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'assignments'), (snap) => {
-      let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
+  return useMemo(() => {
+    if (!all) return undefined;
+    let results = all;
 
-      if (filters?.soldierId) {
-        results = results.filter(a => a.soldierId === filters.soldierId);
-      }
-      if (filters?.tankId) {
-        results = results.filter(a => a.tankId === filters.tankId);
-      }
-      if (filters?.startDate && filters?.endDate) {
-        results = results.filter(a =>
-          dateRangesOverlap(a.startDateTime, a.endDateTime, filters.startDate!, filters.endDate!)
-        );
-      }
+    if (filters?.soldierId) {
+      results = results.filter(a => a.soldierId === filters.soldierId);
+    }
+    if (filters?.tankId) {
+      results = results.filter(a => a.tankId === filters.tankId);
+    }
+    if (filters?.startDate && filters?.endDate) {
+      results = results.filter(a =>
+        dateRangesOverlap(a.startDateTime, a.endDateTime, filters.startDate!, filters.endDate!)
+      );
+    }
 
-      setAssignments(results);
-    });
-    return unsub;
-  }, [filters?.soldierId, filters?.tankId, filters?.startDate, filters?.endDate]);
-
-  return assignments;
+    return results;
+  }, [all, filters?.soldierId, filters?.tankId, filters?.startDate, filters?.endDate]);
 }
 
 export function useTankAssignmentsAt(tankId: string | undefined, dateTime?: string) {
-  const [assignments, setAssignments] = useState<Assignment[] | undefined>();
+  const all = useCollection<Assignment>('assignments');
 
-  useEffect(() => {
-    if (!tankId) {
-      setAssignments([]);
-      return;
-    }
-    const q = query(collection(db, 'assignments'), where('tankId', '==', tankId));
-    const unsub = onSnapshot(q, (snap) => {
-      const now = dateTime ?? new Date().toISOString();
-      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
-      setAssignments(all.filter(a => a.startDateTime <= now && a.endDateTime >= now));
-    });
-    return unsub;
-  }, [tankId, dateTime]);
-
-  return assignments;
+  return useMemo(() => {
+    if (!tankId) return [];
+    if (!all) return undefined;
+    const now = dateTime ?? new Date().toISOString();
+    return all.filter(a => a.tankId === tankId && a.startDateTime <= now && a.endDateTime >= now);
+  }, [all, tankId, dateTime]);
 }
 
 export type ConflictType = 'no_shampaf' | 'on_vacation' | 'overlapping_assignment';
 
 export function useAssignmentConflicts() {
-  const [conflicts, setConflicts] = useState<Map<string, ConflictType[]> | undefined>();
+  const assignments = useCollection<Assignment>('assignments');
+  const allShampafEntries = useCollection<ShampafEntry>('shampafEntries');
+  const allVacations = useCollection<ShampafVacation>('shampafVacations');
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'assignments'), async (snap) => {
-      const assignments = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
-      const now = new Date().toISOString();
-      const activeAssignments = assignments.filter(a => a.endDateTime >= now);
+  return useMemo(() => {
+    if (!assignments || !allShampafEntries || !allVacations) return undefined;
 
-      const result = new Map<string, ConflictType[]>();
+    const now = new Date().toISOString();
+    const activeAssignments = assignments.filter(a => a.endDateTime >= now);
+    const result = new Map<string, ConflictType[]>();
 
-      // Get all shampaf entries and vacations for batch processing
-      const shampafSnap = await getDocs(collection(db, 'shampafEntries'));
-      const allShampafEntries = shampafSnap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
+    for (const a of activeAssignments) {
+      const types: ConflictType[] = [];
 
-      const vacSnap = await getDocs(collection(db, 'shampafVacations'));
-      const allVacations = vacSnap.docs.map(d => d.data() as ShampafVacation);
+      // Check overlapping assignments (same soldier, different assignment, overlapping dates)
+      const overlapping = activeAssignments.find(other =>
+        other.id !== a.id &&
+        other.soldierId === a.soldierId &&
+        dateRangesOverlap(a.startDateTime, a.endDateTime, other.startDateTime, other.endDateTime)
+      );
+      if (overlapping) types.push('overlapping_assignment');
 
-      for (const a of activeAssignments) {
-        const types: ConflictType[] = [];
+      const covering = allShampafEntries.find(e =>
+        e.soldierId === a.soldierId &&
+        e.startDateTime <= a.startDateTime && e.endDateTime >= a.endDateTime
+      );
 
-        // Check overlapping assignments (same soldier, different assignment, overlapping dates)
-        const overlapping = activeAssignments.find(other =>
-          other.id !== a.id &&
-          other.soldierId === a.soldierId &&
-          dateRangesOverlap(a.startDateTime, a.endDateTime, other.startDateTime, other.endDateTime)
-        );
-        if (overlapping) types.push('overlapping_assignment');
-
-        const soldierEntries = allShampafEntries.filter(e => e.soldierId === a.soldierId);
-
-        const covering = soldierEntries.find(e =>
-          e.startDateTime <= a.startDateTime && e.endDateTime >= a.endDateTime
-        );
-
-        if (!covering) {
-          types.push('no_shampaf');
-          result.set(a.id, types);
-          continue;
-        }
-
-        const entryVacations = allVacations.filter(v => v.shampafEntryId === covering.id);
-        const onVacation = entryVacations.some(v =>
-          dateRangesOverlap(v.startDateTime, v.endDateTime, a.startDateTime, a.endDateTime)
-        );
-
-        if (onVacation) types.push('on_vacation');
-
-        if (types.length > 0) result.set(a.id, types);
+      if (!covering) {
+        types.push('no_shampaf');
+        result.set(a.id, types);
+        continue;
       }
 
-      setConflicts(result);
-    });
-    return unsub;
-  }, []);
+      const onVacation = allVacations.some(v =>
+        v.shampafEntryId === covering.id &&
+        dateRangesOverlap(v.startDateTime, v.endDateTime, a.startDateTime, a.endDateTime)
+      );
 
-  return conflicts;
+      if (onVacation) types.push('on_vacation');
+
+      if (types.length > 0) result.set(a.id, types);
+    }
+
+    return result;
+  }, [assignments, allShampafEntries, allVacations]);
 }
 
 // ===== Mutations =====
@@ -145,12 +120,9 @@ export async function addAssignment(data: {
 
   // Check role constraints
   if (data.type === 'tank_role' && data.role) {
-    const soldierSnap = await getDoc(doc(db, 'soldiers', data.soldierId));
-    if (soldierSnap.exists()) {
-      const soldier = soldierSnap.data() as { trainedRole?: string };
-      if (soldier.trainedRole && soldier.trainedRole !== 'commander' && soldier.trainedRole !== data.role) {
-        warnings.push(`החייל מאומן כ${soldier.trainedRole} ושובץ כ${data.role}`);
-      }
+    const soldier = (await getCollection<Soldier>('soldiers', { fresh: false })).find(s => s.id === data.soldierId);
+    if (soldier?.trainedRole && soldier.trainedRole !== 'commander' && soldier.trainedRole !== data.role) {
+      warnings.push(`החייל מאומן כ${soldier.trainedRole} ושובץ כ${data.role}`);
     }
   }
 
@@ -174,19 +146,19 @@ export async function addAssignment(data: {
     endDateTime: data.endDateTime,
     notes: data.notes,
   };
-  await setDoc(doc(db, 'assignments', id), stripUndefined(assignment as unknown as any));
+  await setDoc('assignments', id, stripUndefined(assignment as unknown as any));
 
   return { id, warnings };
 }
 
 export async function updateAssignment(id: string, data: Partial<Assignment>): Promise<void> {
   await requireEditPermission('/assignments');
-  await updateDoc(doc(db, 'assignments', id), stripUndefined(data as any));
+  await updateDoc('assignments', id, stripUndefined(data as any));
 }
 
 export async function deleteAssignment(id: string): Promise<void> {
   await requireEditPermission('/assignments');
-  await deleteDoc(doc(db, 'assignments', id));
+  await deleteDoc('assignments', id);
 }
 
 // ===== Batch Operations =====
@@ -207,15 +179,11 @@ export async function checkBatchConflicts(
   const conflicts: SoldierConflict[] = [];
 
   // Fetch all data once
-  const [assignSnap, shampafSnap, vacSnap] = await Promise.all([
-    getDocs(collection(db, 'assignments')),
-    getDocs(collection(db, 'shampafEntries')),
-    getDocs(collection(db, 'shampafVacations')),
+  const [allAssignments, allShampaf, allVacations] = await Promise.all([
+    getCollection<Assignment>('assignments'),
+    getCollection<ShampafEntry>('shampafEntries'),
+    getCollection<ShampafVacation>('shampafVacations'),
   ]);
-
-  const allAssignments = assignSnap.docs.map(d => ({ ...d.data(), id: d.id } as Assignment));
-  const allShampaf = shampafSnap.docs.map(d => ({ ...d.data(), id: d.id } as ShampafEntry));
-  const allVacations = vacSnap.docs.map(d => d.data() as ShampafVacation);
 
   for (const soldierId of soldierIds) {
     // Check overlapping assignments
@@ -234,8 +202,8 @@ export async function checkBatchConflicts(
     }
 
     // Check shampaf
-    const soldierEntries = allShampaf.filter(e => e.soldierId === soldierId);
-    const covering = soldierEntries.find(e =>
+    const covering = allShampaf.find(e =>
+      e.soldierId === soldierId &&
       e.startDateTime <= startDT && e.endDateTime >= endDT
     );
     if (!covering) {
@@ -247,8 +215,8 @@ export async function checkBatchConflicts(
       continue;
     }
 
-    const entryVacations = allVacations.filter(v => v.shampafEntryId === covering.id);
-    const onVacation = entryVacations.some(v =>
+    const onVacation = allVacations.some(v =>
+      v.shampafEntryId === covering.id &&
       dateRangesOverlap(v.startDateTime, v.endDateTime, startDT, endDT)
     );
     if (onVacation) {
@@ -268,20 +236,18 @@ export async function addAssignmentsBatch(
   deleteIds?: string[],
 ): Promise<{ ids: string[] }> {
   await requireEditPermission('/assignments');
-  const batch = writeBatch(db);
+  const batch = writeBatch();
   const ids: string[] = [];
 
-  if (deleteIds) {
-    for (const did of deleteIds) {
-      batch.delete(doc(db, 'assignments', did));
-    }
+  for (const did of deleteIds ?? []) {
+    batch.delete('assignments', did);
   }
 
   for (const a of assignments) {
     const id = generateId();
     ids.push(id);
     const assignment: Assignment = { ...a, id } as Assignment;
-    batch.set(doc(db, 'assignments', id), stripUndefined(assignment as any));
+    batch.set('assignments', id, stripUndefined(assignment as any));
   }
 
   await batch.commit();

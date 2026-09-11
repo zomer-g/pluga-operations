@@ -42,9 +42,17 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Server routes must reach the network — never answer them with the cached SPA shell.
+        navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
       },
     }),
   ],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000',
+      '/auth': 'http://localhost:3000',
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

@@ -1,15 +1,5 @@
-import { useState, useEffect } from 'react';
-import {
-  collection,
-  doc,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  orderBy,
-  query,
-} from 'firebase/firestore';
-import { db } from '@/firebase';
+import { useMemo } from 'react';
+import { useCollection, setDoc, updateDoc, deleteDoc } from '@/lib/datastore';
 import { generateId, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
 import type { TrainingContent, TrainingTag, TrainingCategory } from '@/db/schema';
@@ -23,67 +13,40 @@ interface TrainingFilters {
 }
 
 export function useTrainingContent(filters?: TrainingFilters) {
-  const [content, setContent] = useState<TrainingContent[] | undefined>();
+  const all = useCollection<TrainingContent>('trainingContent');
+  const tagsKey = filters?.tags?.join(',');
 
-  useEffect(() => {
-    const unsub = onSnapshot(
-      query(collection(db, 'trainingContent'), orderBy('updatedAt', 'desc')),
-      (snap) => {
-        let result = snap.docs.map(d => ({ ...d.data(), id: d.id } as TrainingContent));
+  return useMemo(() => {
+    if (!all) return undefined;
+    let result = all;
 
-        if (filters?.search) {
-          const s = filters.search.toLowerCase();
-          result = result.filter(c =>
-            c.title.toLowerCase().includes(s) ||
-            (c.description?.toLowerCase().includes(s)) ||
-            c.tags.some(t => t.toLowerCase().includes(s))
-          );
-        }
-        if (filters?.category) {
-          result = result.filter(c => c.category === filters.category);
-        }
-        if (filters?.tags && filters.tags.length > 0) {
-          result = result.filter(c =>
-            filters.tags!.some(t => c.tags.includes(t))
-          );
-        }
+    if (filters?.search) {
+      const s = filters.search.toLowerCase();
+      result = result.filter(c =>
+        c.title.toLowerCase().includes(s) ||
+        (c.description?.toLowerCase().includes(s)) ||
+        c.tags.some(t => t.toLowerCase().includes(s))
+      );
+    }
+    if (filters?.category) {
+      result = result.filter(c => c.category === filters.category);
+    }
+    if (filters?.tags && filters.tags.length > 0) {
+      result = result.filter(c =>
+        filters.tags!.some(t => c.tags.includes(t))
+      );
+    }
 
-        setContent(result);
-      }
-    );
-    return unsub;
-  }, [filters?.search, filters?.category, filters?.tags?.join(',')]);
-
-  return content;
+    return result;
+  }, [all, filters?.search, filters?.category, tagsKey]);
 }
 
 export function useTrainingTags() {
-  const [tags, setTags] = useState<TrainingTag[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'trainingTags'), (snap) => {
-      setTags(snap.docs.map(d => ({ ...d.data(), id: d.id } as TrainingTag)));
-    });
-    return unsub;
-  }, []);
-
-  return tags;
+  return useCollection<TrainingTag>('trainingTags');
 }
 
 export function useTrainingCategories() {
-  const [categories, setCategories] = useState<TrainingCategory[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(
-      query(collection(db, 'trainingCategories'), orderBy('order')),
-      (snap) => {
-        setCategories(snap.docs.map(d => ({ ...d.data(), id: d.id } as TrainingCategory)));
-      }
-    );
-    return unsub;
-  }, []);
-
-  return categories;
+  return useCollection<TrainingCategory>('trainingCategories');
 }
 
 // ===== Mutations =====
@@ -92,48 +55,48 @@ export async function addTrainingContent(data: Omit<TrainingContent, 'id' | 'cre
   await requireEditPermission('/training');
   const id = generateId();
   const now = new Date().toISOString();
-  await setDoc(doc(db, 'trainingContent', id), stripUndefined({
+  await setDoc('trainingContent', id, stripUndefined({
     ...data,
     id,
     createdAt: now,
     updatedAt: now,
-  }) as any);
+  }));
   return id;
 }
 
 export async function updateTrainingContent(id: string, data: Partial<TrainingContent>) {
   await requireEditPermission('/training');
-  await updateDoc(doc(db, 'trainingContent', id), stripUndefined({
+  await updateDoc('trainingContent', id, stripUndefined({
     ...data,
     updatedAt: new Date().toISOString(),
-  }) as any);
+  }));
 }
 
 export async function deleteTrainingContent(id: string) {
   await requireEditPermission('/training');
-  await deleteDoc(doc(db, 'trainingContent', id));
+  await deleteDoc('trainingContent', id);
 }
 
 export async function addTrainingTag(name: string, color?: string) {
   await requireEditPermission('/training');
   const id = generateId();
-  await setDoc(doc(db, 'trainingTags', id), stripUndefined({ id, name, color }) as any);
+  await setDoc('trainingTags', id, stripUndefined({ id, name, color }));
   return id;
 }
 
 export async function deleteTrainingTag(id: string) {
   await requireEditPermission('/training');
-  await deleteDoc(doc(db, 'trainingTags', id));
+  await deleteDoc('trainingTags', id);
 }
 
 export async function addTrainingCategory(name: string, order: number = 0) {
   await requireEditPermission('/training');
   const id = generateId();
-  await setDoc(doc(db, 'trainingCategories', id), { id, name, order });
+  await setDoc('trainingCategories', id, { id, name, order });
   return id;
 }
 
 export async function deleteTrainingCategory(id: string) {
   await requireEditPermission('/training');
-  await deleteDoc(doc(db, 'trainingCategories', id));
+  await deleteDoc('trainingCategories', id);
 }

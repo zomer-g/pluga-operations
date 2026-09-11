@@ -1,79 +1,44 @@
-import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, updateDoc, where } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { useMemo } from 'react';
+import { useCollection, setDoc, updateDoc, deleteDoc } from '@/lib/datastore';
 import type { EquipmentAssignment, EquipmentType } from '@/db/schema';
 import { generateId, todayString, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
 import type { EquipmentAssignFormData, EquipmentTypeFormData } from '@/lib/validators';
 
 export function useEquipmentTypes(category?: string) {
-  const [types, setTypes] = useState<EquipmentType[] | undefined>();
-
-  useEffect(() => {
-    const q = category
-      ? query(collection(db, 'equipmentTypes'), where('category', '==', category))
-      : query(collection(db, 'equipmentTypes'), orderBy('name'));
-    const unsub = onSnapshot(q, (snap) => {
-      setTypes(snap.docs.map(d => ({ ...d.data(), id: d.id } as EquipmentType)));
-    });
-    return unsub;
-  }, [category]);
-
-  return types;
+  const all = useCollection<EquipmentType>('equipmentTypes');
+  return useMemo(
+    () => (category ? all?.filter(t => t.category === category) : all),
+    [all, category],
+  );
 }
 
 export function useEquipmentAssignments(soldierId?: string) {
-  const [assignments, setAssignments] = useState<EquipmentAssignment[] | undefined>();
-
-  useEffect(() => {
-    const q = soldierId
-      ? query(collection(db, 'equipmentAssignments'), where('soldierId', '==', soldierId))
-      : query(collection(db, 'equipmentAssignments'));
-    const unsub = onSnapshot(q, (snap) => {
-      setAssignments(snap.docs.map(d => ({ ...d.data(), id: d.id } as EquipmentAssignment)));
-    });
-    return unsub;
-  }, [soldierId]);
-
-  return assignments;
+  const all = useCollection<EquipmentAssignment>('equipmentAssignments');
+  return useMemo(
+    () => (soldierId ? all?.filter(a => a.soldierId === soldierId) : all),
+    [all, soldierId],
+  );
 }
 
 export function useActiveAssignments(soldierId?: string) {
-  const [assignments, setAssignments] = useState<EquipmentAssignment[] | undefined>();
-
-  useEffect(() => {
-    const q = soldierId
-      ? query(collection(db, 'equipmentAssignments'), where('soldierId', '==', soldierId))
-      : query(collection(db, 'equipmentAssignments'));
-    const unsub = onSnapshot(q, (snap) => {
-      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as EquipmentAssignment));
-      setAssignments(all.filter(a => !a.signedInDate));
-    });
-    return unsub;
-  }, [soldierId]);
-
-  return assignments;
+  const all = useCollection<EquipmentAssignment>('equipmentAssignments');
+  return useMemo(
+    () => all?.filter(a => !a.signedInDate && (!soldierId || a.soldierId === soldierId)),
+    [all, soldierId],
+  );
 }
 
 export function useActiveAssignmentCount() {
-  const [count, setCount] = useState<number | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'equipmentAssignments'), (snap) => {
-      const all = snap.docs.map(d => d.data() as EquipmentAssignment);
-      setCount(all.filter(a => !a.signedInDate).length);
-    });
-    return unsub;
-  }, []);
-
-  return count;
+  const all = useCollection<EquipmentAssignment>('equipmentAssignments');
+  return useMemo(() => all?.filter(a => !a.signedInDate).length, [all]);
 }
 
 export async function addEquipmentType(data: EquipmentTypeFormData): Promise<string> {
   await requireEditPermission('/equipment');
   const id = generateId();
   const equipType = { id, ...data } as EquipmentType;
-  await setDoc(doc(db, 'equipmentTypes', id), equipType);
+  await setDoc('equipmentTypes', id, equipType);
   return id;
 }
 
@@ -92,7 +57,7 @@ export async function assignEquipment(
     condition: data.condition as EquipmentAssignment['condition'],
     notes: data.notes || undefined,
   };
-  await setDoc(doc(db, 'equipmentAssignments', id), stripUndefined(assignment as unknown as any));
+  await setDoc('equipmentAssignments', id, stripUndefined(assignment as unknown as any));
   return id;
 }
 
@@ -102,7 +67,7 @@ export async function returnEquipment(
   notes?: string
 ): Promise<void> {
   await requireEditPermission('/equipment');
-  await updateDoc(doc(db, 'equipmentAssignments', assignmentId), stripUndefined({
+  await updateDoc('equipmentAssignments', assignmentId, stripUndefined({
     signedInDate: todayString(),
     condition: condition as EquipmentAssignment['condition'],
     notes,
@@ -111,5 +76,6 @@ export async function returnEquipment(
 
 export async function deleteEquipmentType(id: string): Promise<void> {
   await requireEditPermission('/equipment');
-  await deleteDoc(doc(db, 'equipmentTypes', id));
+  // Fails (with a message) while sign-out records still reference this type.
+  await deleteDoc('equipmentTypes', id);
 }

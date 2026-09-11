@@ -1,101 +1,57 @@
-import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, deleteDoc, updateDoc, getDocs, where, writeBatch } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { useMemo } from 'react';
+import { useCollection, getCollection, writeBatch, updateDoc, deleteDoc } from '@/lib/datastore';
 import type { StatusEntry, SoldierStatus } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
 import type { StatusEntryFormData } from '@/lib/validators';
 
 export function useStatusHistory(soldierId?: string) {
-  const [entries, setEntries] = useState<StatusEntry[] | undefined>();
-
-  useEffect(() => {
-    if (!soldierId) {
-      setEntries([]);
-      return;
-    }
-    const q = query(collection(db, 'statusEntries'), where('soldierId', '==', soldierId));
-    const unsub = onSnapshot(q, (snap) => {
-      const result = snap.docs.map(d => ({ ...d.data(), id: d.id } as StatusEntry));
-      result.sort((a, b) => b.startDate.localeCompare(a.startDate));
-      setEntries(result);
-    });
-    return unsub;
-  }, [soldierId]);
-
-  return entries;
+  const all = useCollection<StatusEntry>('statusEntries');
+  return useMemo(() => {
+    if (!soldierId) return [];
+    if (!all) return undefined;
+    return all
+      .filter(e => e.soldierId === soldierId)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate));
+  }, [all, soldierId]);
 }
 
 export function useCurrentStatus(soldierId?: string) {
-  const [status, setStatus] = useState<StatusEntry | undefined>();
-
-  useEffect(() => {
-    if (!soldierId) {
-      setStatus(undefined);
-      return;
-    }
-    const q = query(collection(db, 'statusEntries'), where('soldierId', '==', soldierId));
-    const unsub = onSnapshot(q, (snap) => {
-      const entries = snap.docs.map(d => ({ ...d.data(), id: d.id } as StatusEntry));
-      setStatus(entries.find(e => !e.endDate));
-    });
-    return unsub;
-  }, [soldierId]);
-
-  return status;
+  const all = useCollection<StatusEntry>('statusEntries');
+  return useMemo(
+    () => (soldierId ? all?.find(e => e.soldierId === soldierId && !e.endDate) : undefined),
+    [all, soldierId],
+  );
 }
 
 export function useAllCurrentStatuses() {
-  const [statusMap, setStatusMap] = useState<Map<string, StatusEntry> | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
-      const currentMap = new Map<string, StatusEntry>();
-      for (const d of snap.docs) {
-        const entry = { ...d.data(), id: d.id } as StatusEntry;
-        if (!entry.endDate) {
-          currentMap.set(entry.soldierId, entry);
-        }
-      }
-      setStatusMap(currentMap);
-    });
-    return unsub;
-  }, []);
-
-  return statusMap;
+  const all = useCollection<StatusEntry>('statusEntries');
+  return useMemo(() => {
+    if (!all) return undefined;
+    const currentMap = new Map<string, StatusEntry>();
+    for (const entry of all) {
+      if (!entry.endDate) currentMap.set(entry.soldierId, entry);
+    }
+    return currentMap;
+  }, [all]);
 }
 
 export function useStatusCounts() {
-  const [counts, setCounts] = useState<Record<string, number> | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
-      const result: Record<string, number> = {};
-      for (const d of snap.docs) {
-        const entry = d.data() as StatusEntry;
-        if (!entry.endDate) {
-          result[entry.status] = (result[entry.status] ?? 0) + 1;
-        }
+  const all = useCollection<StatusEntry>('statusEntries');
+  return useMemo(() => {
+    if (!all) return undefined;
+    const result: Record<string, number> = {};
+    for (const entry of all) {
+      if (!entry.endDate) {
+        result[entry.status] = (result[entry.status] ?? 0) + 1;
       }
-      setCounts(result);
-    });
-    return unsub;
-  }, []);
-
-  return counts;
+    }
+    return result;
+  }, [all]);
 }
 
 export function useAllStatusEntries() {
-  const [entries, setEntries] = useState<StatusEntry[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'statusEntries'), (snap) => {
-      setEntries(snap.docs.map(d => ({ ...d.data(), id: d.id } as StatusEntry)));
-    });
-    return unsub;
-  }, []);
-
-  return entries;
+  return useCollection<StatusEntry>('statusEntries');
 }
 
 export async function addStatusEntry(
@@ -106,18 +62,14 @@ export async function addStatusEntry(
   const id = generateId();
 
   // Find open entries to close
-  const openSnap = await getDocs(
-    query(collection(db, 'statusEntries'), where('soldierId', '==', soldierId))
-  );
-  const openEntries = openSnap.docs
-    .map(d => ({ ...d.data(), id: d.id } as StatusEntry))
-    .filter(e => !e.endDate);
+  const openEntries = (await getCollection<StatusEntry>('statusEntries'))
+    .filter(e => e.soldierId === soldierId && !e.endDate);
 
-  const batch = writeBatch(db);
+  const batch = writeBatch();
 
   // Close previous open statuses
   for (const entry of openEntries) {
-    batch.update(doc(db, 'statusEntries', entry.id), { endDate: data.startDate });
+    batch.update('statusEntries', entry.id, { endDate: data.startDate });
   }
 
   // Add new status entry
@@ -130,7 +82,7 @@ export async function addStatusEntry(
     notes: data.notes || undefined,
     orderNumber: data.orderNumber || undefined,
   };
-  batch.set(doc(db, 'statusEntries', id), stripUndefined(statusEntry as unknown as any));
+  batch.set('statusEntries', id, stripUndefined(statusEntry as unknown as any));
 
   await batch.commit();
   return id;
@@ -138,10 +90,10 @@ export async function addStatusEntry(
 
 export async function updateStatusEntry(id: string, data: Partial<StatusEntry>): Promise<void> {
   await requireEditPermission('/soldiers');
-  await updateDoc(doc(db, 'statusEntries', id), stripUndefined(data as any));
+  await updateDoc('statusEntries', id, stripUndefined(data as any));
 }
 
 export async function deleteStatusEntry(id: string): Promise<void> {
   await requireEditPermission('/soldiers');
-  await deleteDoc(doc(db, 'statusEntries', id));
+  await deleteDoc('statusEntries', id);
 }

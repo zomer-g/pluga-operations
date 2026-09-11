@@ -35,7 +35,6 @@ import {
 import { useAuth } from '@/components/auth/AuthProvider';
 import { TRAINING_CONTENT_TYPES, getTrainingContentTypeLabel } from '@/lib/constants';
 import { uploadFile } from '@/lib/storage';
-import { generateId } from '@/lib/utils';
 import type { TrainingContentType, TrainingContent as TC } from '@/db/schema';
 
 const CONTENT_TYPE_ICONS: Record<TrainingContentType, typeof FileText> = {
@@ -349,9 +348,7 @@ function ContentForm({
     // Upload file if selected
     if (file) {
       try {
-        const fileId = generateId();
-        const storagePath = `training/${fileId}/${file.name}`;
-        fileUrl = await uploadFile(file, storagePath, (p) => setUploadProgress(p));
+        fileUrl = await uploadFile(file, (p) => setUploadProgress(p));
       } catch (err) {
         console.error('File upload failed:', err);
         setSaving(false);

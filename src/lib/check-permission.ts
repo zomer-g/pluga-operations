@@ -1,6 +1,5 @@
-import { doc, getDoc } from 'firebase/firestore';
-import { db, auth } from '@/firebase';
-import type { PermissionAction, PermissionGroup } from '@/db/schema';
+import { getCollection } from '@/lib/datastore';
+import type { PermissionAction, PermissionGroup, UserPermission } from '@/db/schema';
 
 export class PermissionDeniedError extends Error {
   constructor(route: string) {
@@ -9,10 +8,20 @@ export class PermissionDeniedError extends Error {
   }
 }
 
+let currentUserId: string | null = null;
+
+/** Set by AuthProvider once the session is known. */
+export function setCurrentUserId(id: string | null) {
+  currentUserId = id;
+}
+
+export function getCurrentUserId(): string | null {
+  return currentUserId;
+}
+
 /**
- * Non-hook permission check for use in mutation functions.
- * Reads user permission doc and groups from Firestore, then checks
- * if the current user has at least 'edit' access on the given route.
+ * Non-hook permission check for use in mutation functions. This is only an
+ * early, friendly check — the server enforces the same rules on every write.
  */
 export async function requireEditPermission(route: string): Promise<void> {
   const level = await getPermissionLevel(route);
@@ -32,36 +41,26 @@ export async function requireAdminPermission(route: string): Promise<void> {
 }
 
 async function getPermissionLevel(route: string): Promise<PermissionAction | null> {
-  const user = auth.currentUser;
-  if (!user) throw new PermissionDeniedError(route);
+  if (!currentUserId) throw new PermissionDeniedError(route);
 
-  const permSnap = await getDoc(doc(db, 'userPermissions', user.uid));
-
-  // No permission doc = first user / admin bootstrap — allow all
-  if (!permSnap.exists()) return 'admin';
-
-  const data = permSnap.data() as Record<string, unknown>;
-
-  // Normalize groupIds (handle legacy single groupId)
-  let groupIds: string[] = data.groupIds as string[] ?? [];
-  if (!Array.isArray(groupIds) || groupIds.length === 0) {
-    const legacyGroupId = data.groupId as string | undefined;
-    groupIds = legacyGroupId ? [legacyGroupId] : [];
-  }
+  const [users, groups] = await Promise.all([
+    getCollection<UserPermission>('userPermissions', { fresh: false }),
+    getCollection<PermissionGroup>('permissionGroups', { fresh: false }),
+  ]);
+  const perm = users.find(u => u.id === currentUserId);
+  if (!perm) return null;
 
   // Check custom overrides first
-  const overrides = data.customPageOverrides as Record<string, PermissionAction> | undefined;
-  if (overrides?.[route]) return overrides[route];
+  const override = perm.customPageOverrides?.[route];
+  if (override) return override;
 
   // Check all groups — find highest permission
   const levels: Record<PermissionAction, number> = { view: 1, edit: 2, admin: 3 };
   let highest: PermissionAction | null = null;
 
-  for (const gId of groupIds) {
-    const groupSnap = await getDoc(doc(db, 'permissionGroups', gId));
-    if (!groupSnap.exists()) continue;
-    const group = groupSnap.data() as PermissionGroup;
-    const action = group.pagePermissions[route];
+  for (const gId of perm.groupIds ?? []) {
+    const group = groups.find(g => g.id === gId);
+    const action = group?.pagePermissions[route];
     if (action && (!highest || levels[action] > levels[highest])) {
       highest = action;
     }

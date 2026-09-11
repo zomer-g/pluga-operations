@@ -1,43 +1,25 @@
-import { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { useMemo } from 'react';
+import { useCollection, setDoc, updateDoc, deleteDoc } from '@/lib/datastore';
 import type { Activation } from '@/db/schema';
 import { generateId, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
 
 export function useActivations() {
-  const [activations, setActivations] = useState<Activation[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'activations'), (snap) => {
-      setActivations(snap.docs.map(d => ({ ...d.data(), id: d.id } as Activation)));
-    });
-    return unsub;
-  }, []);
-
-  return activations;
+  return useCollection<Activation>('activations');
 }
 
 export function useCurrentActivation() {
-  const [activation, setActivation] = useState<Activation | null | undefined>();
+  const all = useCollection<Activation>('activations');
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'activations'), (snap) => {
-      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Activation));
-      const today = new Date().toISOString().split('T')[0]!;
-      // Find activation that covers today, or the most recent one
-      const current = all.find(a => a.startDate <= today && a.endDate >= today);
-      if (current) {
-        setActivation(current);
-      } else {
-        // Fallback: return the latest activation
-        setActivation(all.sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null);
-      }
-    });
-    return unsub;
-  }, []);
-
-  return activation;
+  return useMemo(() => {
+    if (!all) return undefined;
+    const today = new Date().toISOString().split('T')[0]!;
+    // Find activation that covers today, or the most recent one
+    const current = all.find(a => a.startDate <= today && a.endDate >= today);
+    if (current) return current;
+    // Fallback: return the latest activation
+    return [...all].sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null;
+  }, [all]);
 }
 
 export async function addActivation(data: {
@@ -49,16 +31,16 @@ export async function addActivation(data: {
   await requireEditPermission('/soldiers');
   const id = generateId();
   const activation: Activation = { id, ...data };
-  await setDoc(doc(db, 'activations', id), stripUndefined(activation as unknown as any));
+  await setDoc('activations', id, stripUndefined(activation as unknown as any));
   return id;
 }
 
 export async function updateActivation(id: string, data: Partial<Activation>): Promise<void> {
   await requireEditPermission('/soldiers');
-  await updateDoc(doc(db, 'activations', id), stripUndefined(data as any));
+  await updateDoc('activations', id, stripUndefined(data as any));
 }
 
 export async function deleteActivation(id: string): Promise<void> {
   await requireEditPermission('/soldiers');
-  await deleteDoc(doc(db, 'activations', id));
+  await deleteDoc('activations', id);
 }

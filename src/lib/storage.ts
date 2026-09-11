@@ -1,6 +1,3 @@
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '@/firebase';
-
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -35,42 +32,46 @@ export function validateFile(file: File): void {
 }
 
 /**
- * Upload a file to Firebase Storage and return the download URL.
- * Validates file type and size before uploading.
+ * Upload a file through the server to R2 and return its app URL (/api/files/...).
+ * The server re-validates type and size and chooses the storage key.
  */
 export function uploadFile(
   file: File,
-  path: string,
   onProgress?: (percent: number) => void,
 ): Promise<string> {
   validateFile(file);
 
   return new Promise((resolve, reject) => {
-    const storageRef = ref(storage, path);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const form = new FormData();
+    form.append('file', file, file.name);
 
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        onProgress?.(percent);
-      },
-      (error) => reject(error),
-      async () => {
-        const url = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(url);
-      },
-    );
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/files');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let payload: { url?: string; error?: string } | null = null;
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        // non-JSON error page
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && payload?.url) resolve(payload.url);
+      else reject(new Error(payload?.error ?? `העלאת הקובץ נכשלה (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error('אין חיבור לשרת — העלאת הקובץ נכשלה'));
+    xhr.send(form);
   });
 }
 
 /**
- * Delete a file from Firebase Storage by its full URL.
+ * Delete an uploaded file by its app URL.
  */
 export async function deleteFileByUrl(url: string) {
+  if (!url.startsWith('/api/files/')) return;
   try {
-    const storageRef = ref(storage, url);
-    await deleteObject(storageRef);
+    await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
   } catch {
     // File may not exist, ignore
   }

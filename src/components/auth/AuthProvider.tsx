@@ -1,12 +1,13 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut as firebaseSignOut, type User } from 'firebase/auth';
-import { auth, googleProvider } from '@/firebase';
-import { ensureUserPermission } from '@/features/permissions/usePermissions';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { api, ApiError, UNAUTHORIZED_EVENT } from '@/lib/api';
+import { startLiveUpdates, stopLiveUpdates, clearDataCache } from '@/lib/datastore';
+import { setCurrentUserId } from '@/lib/check-permission';
 
 interface AuthUser {
   email: string;
   name: string;
   picture: string;
+  /** The user's id in the app (users.id) — also the key of their userPermissions row. */
   sub: string;
 }
 
@@ -28,77 +29,95 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-function firebaseUserToAuthUser(user: User): AuthUser {
-  return {
-    email: user.email ?? '',
-    name: user.displayName ?? '',
-    picture: user.photoURL ?? '',
-    sub: user.uid,
-  };
+// Remembered so the PWA can open in read-only mode without a connection.
+const USER_CACHE_KEY = 'pluga:user';
+
+function readCachedUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(USER_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUser(user: AuthUser | null) {
+  try {
+    if (user) localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+interface MeResponse {
+  user: { id: string; email: string; name: string; picture: string };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const authUser = firebaseUserToAuthUser(firebaseUser);
-        setUser(authUser);
-        setAuthError(null);
-        // Ensure permission doc exists for this user
-        try {
-          await ensureUserPermission({ sub: authUser.sub, email: authUser.email, name: authUser.name });
-        } catch (err) {
-          console.warn('Failed to ensure user permission:', err);
-        }
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
-    return unsubscribe;
+  const applyUser = useCallback((next: AuthUser | null) => {
+    setCurrentUserId(next?.sub ?? null);
+    writeCachedUser(next);
+    setUser(next);
   }, []);
 
-  const signIn = async () => {
-    setAuthError(null);
+  const loadSession = useCallback(async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err: unknown) {
-      const firebaseErr = err as { code?: string; message?: string };
-      console.error('Sign in popup error:', firebaseErr);
-
-      // If popup was blocked or closed, fall back to redirect
-      if (firebaseErr.code === 'auth/popup-blocked' || firebaseErr.code === 'auth/popup-closed-by-user') {
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        } catch (redirectErr) {
-          console.error('Sign in redirect error:', redirectErr);
-        }
+      const { user: me } = await api<MeResponse>('/api/me');
+      const cached = readCachedUser();
+      // A different account on this device must never see the previous account's cached data.
+      if (cached && cached.sub !== me.id) clearDataCache();
+      applyUser({ email: me.email, name: me.name, picture: me.picture, sub: me.id });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearDataCache();
+        applyUser(null);
+      } else {
+        // Offline or server unavailable (e.g. mid-deploy): fall back to the
+        // last signed-in user and cached data, read-only.
+        applyUser(readCachedUser());
       }
-
-      // Show user-friendly error messages
-      const errorMessages: Record<string, string> = {
-        'auth/popup-closed-by-user': 'החלון נסגר - נסה שוב',
-        'auth/popup-blocked': 'החלון נחסם - מנסה דרך אחרת...',
-        'auth/unauthorized-domain': 'הדומיין לא מורשה - יש להוסיף אותו בקונסול Firebase',
-        'auth/operation-not-allowed': 'התחברות עם Google לא מופעלת - יש להפעיל בקונסול Firebase',
-        'auth/network-request-failed': 'שגיאת רשת - בדוק חיבור לאינטרנט',
-      };
-
-      setAuthError(
-        errorMessages[firebaseErr.code ?? ''] ??
-        `שגיאת התחברות: ${firebaseErr.code ?? firebaseErr.message ?? 'unknown'}`
-      );
+    } finally {
+      setLoading(false);
     }
+  }, [applyUser]);
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
+
+  useEffect(() => {
+    if (!user) return;
+    startLiveUpdates();
+    return () => stopLiveUpdates();
+  }, [user]);
+
+  // Session expired or revoked while the app was open.
+  useEffect(() => {
+    const onUnauthorized = () => {
+      clearDataCache();
+      applyUser(null);
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, [applyUser]);
+
+  const signIn = async () => {
+    window.location.href = '/auth/google/start';
   };
 
   const signOut = async () => {
-    await firebaseSignOut(auth);
-    setUser(null);
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {
+      // Still clear local state below.
+    }
+    stopLiveUpdates();
+    clearDataCache();
+    applyUser(null);
   };
 
   if (loading) {
@@ -130,11 +149,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             </svg>
             התחבר עם Google
           </button>
-          {authError && (
-            <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm max-w-xs mx-auto">
-              {authError}
-            </div>
-          )}
         </div>
       </div>
     );

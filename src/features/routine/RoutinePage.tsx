@@ -70,6 +70,8 @@ export function RoutinePage() {
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
   const [editingVehicleName, setEditingVehicleName] = useState('');
 
+  const [copiedRoutine, setCopiedRoutine] = useState(false);
+
   if (!templates || !vehicles || !soldiers) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -175,8 +177,6 @@ export function RoutinePage() {
       if (slot.soldierId) assignedSoldierIds.add(slot.soldierId);
     }
   }
-
-  const [copiedRoutine, setCopiedRoutine] = useState(false);
 
   const buildRoutineRows = (): { headers: string[]; rows: string[][] } => {
     const headers = ['מחלקה', 'רכב', 'תפקיד', 'חייל'];

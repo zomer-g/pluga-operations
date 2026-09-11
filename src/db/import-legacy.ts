@@ -1,5 +1,5 @@
-import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { getCollection, writeBatch, type CollectionName } from '@/lib/datastore';
+import { requireAdminPermission } from '@/lib/check-permission';
 import type { Soldier, Tank, Platoon, Assignment, ShampafEntry, CrewRole } from './schema';
 import { generateId } from '@/lib/utils';
 
@@ -53,6 +53,7 @@ export async function importLegacyData(csvData: {
   statuses: string;
   assignments: string;
 }): Promise<{ message: string; counts: Record<string, number> }> {
+  await requireAdminPermission('/settings');
   const oldSoldiers = parseCSV(csvData.soldiers);
   const oldDepts = csvData.departments ? parseCSV(csvData.departments) : [];
   const oldTanks = csvData.tanks ? parseCSV(csvData.tanks) : [];
@@ -139,36 +140,28 @@ export async function importLegacyData(csvData: {
     return assignment as unknown as Assignment;
   });
 
-  // Clean object: remove all undefined/null values (Firestore rejects undefined)
+  // Clean object: remove all undefined/null values
   const clean = (obj: Record<string, unknown>): Record<string, any> =>
     JSON.parse(JSON.stringify(obj));
 
-  // Write to Firestore in batches
-  const writeBatchData = async (collectionName: string, items: Record<string, unknown>[]) => {
-    // Clear existing
-    const existing = await getDocs(collection(db, collectionName));
-    if (!existing.empty) {
-      const batch = writeBatch(db);
-      existing.docs.forEach(d => batch.delete(d.ref));
-      await batch.commit();
+  // Replace the existing rows of each collection — all in one atomic batch
+  const batch = writeBatch();
+  const replaceCollection = async (collectionName: CollectionName, items: Record<string, unknown>[]) => {
+    for (const existing of await getCollection<{ id: string }>(collectionName)) {
+      batch.delete(collectionName, existing.id);
     }
-    // Write in chunks of 500
-    for (let i = 0; i < items.length; i += 500) {
-      const batch = writeBatch(db);
-      for (const item of items.slice(i, i + 500)) {
-        const cleaned = clean(item);
-        const id = cleaned['id'] as string;
-        batch.set(doc(db, collectionName, id), cleaned);
-      }
-      await batch.commit();
+    for (const item of items) {
+      const cleaned = clean(item);
+      batch.set(collectionName, cleaned['id'] as string, cleaned);
     }
   };
 
-  await writeBatchData('platoons', platoons as unknown as Record<string, unknown>[]);
-  await writeBatchData('soldiers', soldiers as unknown as Record<string, unknown>[]);
-  await writeBatchData('tanks', tanks as unknown as Record<string, unknown>[]);
-  await writeBatchData('shampafEntries', shampafEntries as unknown as Record<string, unknown>[]);
-  await writeBatchData('assignments', assignments as unknown as Record<string, unknown>[]);
+  await replaceCollection('platoons', platoons as unknown as Record<string, unknown>[]);
+  await replaceCollection('soldiers', soldiers as unknown as Record<string, unknown>[]);
+  await replaceCollection('tanks', tanks as unknown as Record<string, unknown>[]);
+  await replaceCollection('shampafEntries', shampafEntries as unknown as Record<string, unknown>[]);
+  await replaceCollection('assignments', assignments as unknown as Record<string, unknown>[]);
+  await batch.commit();
 
   return {
     message: 'ייבוא הושלם בהצלחה',

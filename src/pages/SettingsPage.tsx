@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useAppStore, type CacheCategory } from '@/stores/useAppStore';
-import { exportData, importData, downloadBackup } from '@/db/backup';
+import { exportData, importData, downloadBackup, clearAllData } from '@/db/backup';
 import { usePlatoons, addPlatoon, deletePlatoon } from '@/hooks/useTanks';
 import { useIsAdmin } from '@/features/permissions/usePermissions';
 
@@ -141,17 +141,7 @@ export function SettingsPage() {
   };
 
   const handleClearData = async () => {
-    const { collection, getDocs, writeBatch } = await import('firebase/firestore');
-    const { db } = await import('@/firebase');
-    const collections = ['soldiers', 'equipmentTypes', 'equipmentAssignments', 'statusEntries', 'tanks', 'tankCrewAssignments', 'platoons', 'squads', 'shampafEntries', 'shampafVacations', 'assignments', 'activations', 'routineTemplates', 'trainingContent', 'trainingTags', 'trainingCategories', 'donations', 'userPermissions', 'permissionGroups'];
-    for (const name of collections) {
-      const snap = await getDocs(collection(db, name));
-      if (!snap.empty) {
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-      }
-    }
+    await clearAllData();
     setShowClearConfirm(false);
     window.location.reload();
   };

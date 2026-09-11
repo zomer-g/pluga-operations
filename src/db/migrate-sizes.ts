@@ -1,5 +1,5 @@
-import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { getCollection, writeBatch } from '@/lib/datastore';
+import type { Soldier } from './schema';
 import { requireAdminPermission } from '@/lib/check-permission';
 
 interface CsvSoldierItems {
@@ -80,12 +80,10 @@ export async function migrateSizesFromCsv(csvContent: string): Promise<Migration
   const csvSoldiers = parseCsv(csvContent);
   const result: MigrationResult = { updated: 0, skipped: 0, notFound: [], details: [] };
 
-  const snap = await getDocs(collection(db, 'soldiers'));
+  const soldiers = await getCollection<Soldier>('soldiers');
   const soldiersByMilitaryId = new Map<string, { docId: string; data: Record<string, unknown> }>();
-  for (const d of snap.docs) {
-    const data = d.data();
-    const mid = data.militaryId as string | undefined;
-    if (mid) soldiersByMilitaryId.set(mid, { docId: d.id, data });
+  for (const s of soldiers) {
+    if (s.militaryId) soldiersByMilitaryId.set(s.militaryId, { docId: s.id, data: s as unknown as Record<string, unknown> });
   }
 
   interface UpdateEntry { docId: string; personalItems: Record<string, string>; name: string }
@@ -119,16 +117,13 @@ export async function migrateSizesFromCsv(csvContent: string): Promise<Migration
     updates.push({ docId: match.docId, personalItems, name });
   }
 
-  for (let i = 0; i < updates.length; i += 500) {
-    const batch = writeBatch(db);
-    const chunk = updates.slice(i, i + 500);
-    for (const u of chunk) {
-      batch.update(doc(db, 'soldiers', u.docId), { personalItems: u.personalItems });
-      const fieldDesc = Object.entries(u.personalItems).map(([k, v]) => `${k}=${v}`).join(', ');
-      result.details.push(`${u.name}: ${fieldDesc}`);
-    }
-    await batch.commit();
+  const batch = writeBatch();
+  for (const u of updates) {
+    batch.update('soldiers', u.docId, { personalItems: u.personalItems });
+    const fieldDesc = Object.entries(u.personalItems).map(([k, v]) => `${k}=${v}`).join(', ');
+    result.details.push(`${u.name}: ${fieldDesc}`);
   }
+  await batch.commit();
 
   result.updated = updates.length;
   return result;

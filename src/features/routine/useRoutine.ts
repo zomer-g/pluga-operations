@@ -1,16 +1,5 @@
-import { useState, useEffect } from 'react';
-import {
-  collection,
-  doc,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-  query,
-  where,
-  getDocs,
-  writeBatch,
-} from 'firebase/firestore';
-import { db, auth } from '@/firebase';
+import { useMemo } from 'react';
+import { useCollection, getCollection, setDoc, updateDoc, deleteDoc, writeBatch } from '@/lib/datastore';
 import { generateId, stripUndefined } from '@/lib/utils';
 import { requireEditPermission } from '@/lib/check-permission';
 import type {
@@ -26,57 +15,32 @@ import type {
 // ===== Routine Departments =====
 
 export function useRoutineDepartments() {
-  const [departments, setDepartments] = useState<RoutineDepartment[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'routineDepartments'), (snap) => {
-      const result = snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineDepartment));
-      result.sort((a, b) => a.order - b.order);
-      setDepartments(result);
-    });
-    return unsub;
-  }, []);
-
-  return departments;
+  const all = useCollection<RoutineDepartment>('routineDepartments');
+  return useMemo(() => all && [...all].sort((a, b) => a.order - b.order), [all]);
 }
 
 export async function addRoutineDepartment(name: string, order: number = 0): Promise<string> {
   await requireEditPermission('/routine');
   const id = generateId();
-  await setDoc(doc(db, 'routineDepartments', id), { id, name, order });
+  await setDoc('routineDepartments', id, { id, name, order });
   return id;
 }
 
 export async function updateRoutineDepartment(id: string, data: { name?: string; order?: number }): Promise<void> {
   await requireEditPermission('/routine');
-  await updateDoc(doc(db, 'routineDepartments', id), stripUndefined(data as any));
+  await updateDoc('routineDepartments', id, stripUndefined(data as any));
 }
 
 export async function deleteRoutineDepartment(id: string): Promise<void> {
   await requireEditPermission('/routine');
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'routineDepartments', id));
-  // Clear departmentId from vehicles in this department
-  const vehicleSnap = await getDocs(query(collection(db, 'routineVehicles'), where('departmentId', '==', id)));
-  for (const d of vehicleSnap.docs) {
-    batch.update(d.ref, { departmentId: '' });
-  }
-  await batch.commit();
+  // Vehicles in this department keep existing; the database clears their departmentId.
+  await deleteDoc('routineDepartments', id);
 }
 
 // ===== Routine Vehicles =====
 
 export function useRoutineVehicles() {
-  const [vehicles, setVehicles] = useState<RoutineVehicle[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'routineVehicles'), (snap) => {
-      setVehicles(snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineVehicle)));
-    });
-    return unsub;
-  }, []);
-
-  return vehicles;
+  return useCollection<RoutineVehicle>('routineVehicles');
 }
 
 export async function addRoutineVehicle(data: {
@@ -86,75 +50,37 @@ export async function addRoutineVehicle(data: {
 }): Promise<string> {
   await requireEditPermission('/routine');
   const id = generateId();
-  await setDoc(doc(db, 'routineVehicles', id), stripUndefined({ ...data, id }) as any);
+  await setDoc('routineVehicles', id, stripUndefined({ ...data, id }));
   return id;
 }
 
 export async function updateRoutineVehicle(id: string, data: { designation?: string; departmentId?: string }): Promise<void> {
   await requireEditPermission('/routine');
-  await updateDoc(doc(db, 'routineVehicles', id), stripUndefined(data as any));
+  await updateDoc('routineVehicles', id, stripUndefined(data as any));
 }
 
 export async function deleteRoutineVehicle(id: string): Promise<void> {
   await requireEditPermission('/routine');
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'routineVehicles', id));
-  // Delete routine templates for this vehicle
-  const tmplSnap = await getDocs(query(collection(db, 'routineTemplates'), where('tankId', '==', id)));
-  for (const d of tmplSnap.docs) {
-    batch.delete(d.ref);
-  }
-  // Delete change logs for those templates
-  for (const d of tmplSnap.docs) {
-    const logSnap = await getDocs(query(collection(db, 'routineChangeLogs'), where('templateId', '==', d.id)));
-    logSnap.docs.forEach(l => batch.delete(l.ref));
-  }
-  await batch.commit();
+  // The server removes the vehicle's templates and their change logs with it.
+  await deleteDoc('routineVehicles', id);
 }
 
 // ===== Routine Templates =====
 
 export function useRoutineTemplates() {
-  const [templates, setTemplates] = useState<RoutineTemplate[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'routineTemplates'), (snap) => {
-      setTemplates(snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineTemplate)));
-    });
-    return unsub;
-  }, []);
-
-  return templates;
+  return useCollection<RoutineTemplate>('routineTemplates');
 }
 
 export function useRoutineChangeLogs() {
-  const [logs, setLogs] = useState<RoutineChangeLog[] | undefined>();
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'routineChangeLogs'), (snap) => {
-      const result = snap.docs.map(d => ({ ...d.data(), id: d.id } as RoutineChangeLog));
-      result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      setLogs(result);
-    });
-    return unsub;
-  }, []);
-
-  return logs;
+  const all = useCollection<RoutineChangeLog>('routineChangeLogs');
+  return useMemo(() => all && [...all].sort((a, b) => b.timestamp.localeCompare(a.timestamp)), [all]);
 }
 
 // ===== Change log helper =====
 
-async function logChange(data: Omit<RoutineChangeLog, 'id' | 'changedBy' | 'changedByName' | 'timestamp'>) {
-  const user = auth.currentUser;
-  const id = generateId();
-  const log: RoutineChangeLog = {
-    ...data,
-    id,
-    changedBy: user?.uid ?? 'unknown',
-    changedByName: user?.displayName ?? 'unknown',
-    timestamp: new Date().toISOString(),
-  };
-  await setDoc(doc(db, 'routineChangeLogs', id), stripUndefined(log as unknown as any));
+/** The server stamps changedBy / changedByName / timestamp from the session. */
+function logChangeOp(data: Omit<RoutineChangeLog, 'id' | 'changedBy' | 'changedByName' | 'timestamp'>) {
+  return { collection: 'routineChangeLogs' as const, id: generateId(), data: stripUndefined(data) };
 }
 
 // ===== Template Mutations =====
@@ -168,37 +94,35 @@ export async function addRoutineTemplate(data: {
   await requireEditPermission('/routine');
   const id = generateId();
   const now = new Date().toISOString();
-  await setDoc(doc(db, 'routineTemplates', id), stripUndefined({
+  const batch = writeBatch();
+  batch.set('routineTemplates', id, stripUndefined({
     ...data,
     id,
     createdAt: now,
     updatedAt: now,
-  }) as any);
-
-  await logChange({ templateId: id, action: 'create' });
+  }));
+  const log = logChangeOp({ templateId: id, action: 'create' });
+  batch.set(log.collection, log.id, log.data);
+  await batch.commit();
   return id;
 }
 
 export async function updateRoutineTemplate(id: string, data: Partial<RoutineTemplate>) {
   await requireEditPermission('/routine');
-  await updateDoc(doc(db, 'routineTemplates', id), stripUndefined({
+  await updateDoc('routineTemplates', id, stripUndefined({
     ...data,
     updatedAt: new Date().toISOString(),
-  }) as any);
+  }));
 }
 
 export async function deleteRoutineTemplate(id: string) {
   await requireEditPermission('/routine');
+  // The server drops the template's change logs together with it.
+  await deleteDoc('routineTemplates', id);
+}
 
-  await logChange({ templateId: id, action: 'delete' });
-
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'routineTemplates', id));
-
-  const logsSnap = await getDocs(query(collection(db, 'routineChangeLogs'), where('templateId', '==', id)));
-  logsSnap.docs.forEach(d => batch.delete(d.ref));
-
-  await batch.commit();
+async function getTemplate(templateId: string): Promise<RoutineTemplate | undefined> {
+  return (await getCollection<RoutineTemplate>('routineTemplates')).find(t => t.id === templateId);
 }
 
 export async function assignRoutineSlot(
@@ -209,11 +133,9 @@ export async function assignRoutineSlot(
 ) {
   await requireEditPermission('/routine');
 
-  const { getDoc: getDocFn } = await import('firebase/firestore');
-  const snap = await getDocFn(doc(db, 'routineTemplates', templateId));
-  if (!snap.exists()) return;
+  const template = await getTemplate(templateId);
+  if (!template) return;
 
-  const template = snap.data() as RoutineTemplate;
   const crewSlots = [...(template.crewSlots ?? [])];
 
   if (role !== 'fifth') {
@@ -228,18 +150,20 @@ export async function assignRoutineSlot(
     crewSlots.push({ role: 'driver' as CrewRole, soldierId });
   }
 
-  await updateDoc(doc(db, 'routineTemplates', templateId), {
+  const batch = writeBatch();
+  batch.update('routineTemplates', templateId, {
     crewSlots,
     updatedAt: new Date().toISOString(),
   });
-
-  await logChange({
+  const log = logChangeOp({
     templateId,
     action: 'assign',
     role: role === 'fifth' ? undefined : role as CrewRole,
     soldierId,
     soldierName,
   });
+  batch.set(log.collection, log.id, log.data);
+  await batch.commit();
 }
 
 export async function unassignRoutineSlot(
@@ -250,25 +174,25 @@ export async function unassignRoutineSlot(
 ) {
   await requireEditPermission('/routine');
 
-  const { getDoc: getDocFn } = await import('firebase/firestore');
-  const snap = await getDocFn(doc(db, 'routineTemplates', templateId));
-  if (!snap.exists()) return;
+  const template = await getTemplate(templateId);
+  if (!template) return;
 
-  const template = snap.data() as RoutineTemplate;
   const crewSlots = (template.crewSlots ?? []).filter(
     s => !(s.role === role && s.soldierId === soldierId)
   );
 
-  await updateDoc(doc(db, 'routineTemplates', templateId), {
+  const batch = writeBatch();
+  batch.update('routineTemplates', templateId, {
     crewSlots,
     updatedAt: new Date().toISOString(),
   });
-
-  await logChange({
+  const log = logChangeOp({
     templateId,
     action: 'unassign',
     role,
     soldierId,
     soldierName,
   });
+  batch.set(log.collection, log.id, log.data);
+  await batch.commit();
 }
